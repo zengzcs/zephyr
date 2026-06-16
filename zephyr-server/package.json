@@ -1,0 +1,45 @@
+{
+  "name": "zephyr-server",
+  "version": "0.1.0",
+  "description": "Zephyr API Server - NestJS + Bun + Drizzle + SQLite + Redis",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "build": "nest build",
+    "start": "bun run dist/main.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/scripts/migrate.ts",
+    "db:seed": "bun run src/scripts/seed.ts",
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/swagger": "^11.0.3",
+    "@nestjs/typeorm": "^11.0.0",
+    "drizzle-orm": "^0.39.3",
+    "better-sqlite3": "^11.8.1",
+    "ioredis": "^5.6.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.2",
+    "@nestjs/schematics": "^11.0.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.5",
+    "@types/ioredis": "^4.28.10",
+    "drizzle-kit": "^0.30.4",
+    "prettier": "^3.5.2",
+    "typescript": "^5.8.2",
+    "tsx": "^4.19.3"
+  }
+}
