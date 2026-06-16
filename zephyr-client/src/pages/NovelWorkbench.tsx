@@ -16,7 +16,6 @@ import {
   AccordionDetails,
   IconButton,
   List,
-  ListItem,
   ListItemButton,
   ListItemText,
   Tooltip,
@@ -90,6 +89,7 @@ export default function NovelWorkbench() {
 
   // Version history state
   const [versions, setVersions] = useState<Version[]>([])
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
   const [_versionsExpanded, _setVersionsExpanded] = useState(true)
   const [_currentOutline, setCurrentOutline] = useState<string | null>(null)
   const [refinePrompt, setRefinePrompt] = useState('')
@@ -227,6 +227,7 @@ export default function NovelWorkbench() {
       if (res.ok) {
         const data = await res.json()
         setCurrentOutline(JSON.stringify(data.volumes, null, 2))
+        setSelectedVersionId(version.id)
       }
     } catch {
       setError('无法加载版本')
@@ -454,15 +455,19 @@ export default function NovelWorkbench() {
           ) : (
             <List dense>
               {versions.map((ver) => (
-                <ListItem key={ver.id} disablePadding sx={{ mb: 0.5 }}>
-                  <ListItemButton
-                    onClick={() => handleSwitchVersion(ver)}
-                    sx={{
-                      borderLeft: '3px solid transparent',
-                      '&.Mui-selected': { borderLeftColor: '#4fc08d', bgcolor: '#1a2e1a' },
-                      '&:hover': { borderLeftColor: '#4fc08d' },
-                    }}
-                  >
+                <ListItemButton
+                  key={ver.id}
+                  component="li"
+                  selected={selectedVersionId === ver.id}
+                  onClick={() => handleSwitchVersion(ver)}
+                  sx={{
+                    mb: 0.5,
+                    px: 1,
+                    borderLeft: '3px solid transparent',
+                    '&.Mui-selected': { borderLeftColor: '#4fc08d', bgcolor: '#1a2e1a' },
+                    '&:hover': { borderLeftColor: '#4fc08d' },
+                  }}
+                >
                     <ListItemText
                       primary={
                         <Typography variant="body2" sx={{ color: '#4fc08d', fontWeight: 'bold' }}>
@@ -480,8 +485,7 @@ export default function NovelWorkbench() {
                         </>
                       }
                     />
-                  </ListItemButton>
-                </ListItem>
+                </ListItemButton>
               ))}
             </List>
           )}
