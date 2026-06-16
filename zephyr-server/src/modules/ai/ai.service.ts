@@ -111,4 +111,52 @@ export class AiService {
 
     return result.content;
   }
+
+  /** Refine an existing outline with a user prompt */
+  async refineOutline(currentOutline: string, userPrompt: string): Promise<string> {
+    const systemPrompt = `你是一位资深小说编辑。用户将提供当前小说大纲和修改要求，请根据要求调整大纲。
+
+请严格按照以下 JSON 格式输出（与输入格式一致），不要包含任何额外文字或 markdown 标记：
+{
+  "title": "小说书名",
+  "synopsis": "小说简介",
+  "style": "题材风格描述",
+  "volumes": [
+    {
+      "title": "卷名",
+      "theme": "本卷主题",
+      "synopsis": "本卷简介",
+      "chapters": [
+        {
+          "title": "章节标题",
+          "synopsis": "章节内容概要"
+        }
+      ]
+    }
+  ]
+}
+
+要求：
+- 保留原大纲的核心结构和风格
+- 根据用户要求对章节标题、简介、卷规划进行合理调整
+- 保持故事逻辑连贯`;
+
+    const userMessage = `当前大纲：
+${currentOutline}
+
+修改要求：${userPrompt}`;
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ];
+
+    const result = await this.chatCompletion({
+      messages,
+      temperature: 0.7,
+      maxTokens: 8192,
+    });
+
+    return result.content;
+  }
 }

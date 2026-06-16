@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
 import {
-  Container,
   Typography,
   Box,
   Paper,
   TextField,
   Button,
-  Alert,
+ Alert,
   CircularProgress,
   Divider,
-  Grid,
   Card,
   CardContent,
   Chip,
@@ -17,12 +15,20 @@ import {
   AccordionSummary,
   AccordionDetails,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Tooltip,
 } from '@mui/material'
-import { Delete as DeleteIcon, ExpandMore as ExpandMoreIcon, AutoFixHigh as AutoFixHighIcon, Description as DescriptionIcon } from '@mui/icons-material'
+import {
+  Delete as DeleteIcon,
+  ExpandMore as ExpandMoreIcon,
+  AutoFixHigh as AutoFixHighIcon,
+  Description as DescriptionIcon,
+  History as HistoryIcon,
+  Refresh as RefreshIcon,
+} from '@mui/icons-material'
 
 interface VolumeChapter {
   title: string
@@ -64,6 +70,16 @@ interface GeneratedBook extends Book {
   volumes: Volume[]
 }
 
+interface Version {
+  id: number
+  book_id: number
+  title: string
+  synopsis: string
+  style: string
+  refine_prompt: string
+  created_at: string
+}
+
 export default function NovelWorkbench() {
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
@@ -71,12 +87,20 @@ export default function NovelWorkbench() {
   const [success, setSuccess] = useState<string | null>(null)
   const [books, setBooks] = useState<Book[]>([])
   const [selectedBook, setSelectedBook] = useState<GeneratedBook | null>(null)
-  const [bookDialogOpen, setBookDialogOpen] = useState(false)
+
+  // Version history state
+  const [versions, setVersions] = useState<Version[]>([])
+  const [_versionsExpanded, _setVersionsExpanded] = useState(true)
+  const [_currentOutline, setCurrentOutline] = useState<string | null>(null)
+  const [refinePrompt, setRefinePrompt] = useState('')
+  const [refining, setRefining] = useState(false)
+
+  const API = 'http://localhost:5010'
 
   // Fetch book list
   const fetchBooks = async () => {
     try {
-      const res = await fetch('http://localhost:5010/ai/books')
+      const res = await fetch(`${API}/ai/books`)
       if (res.ok) {
         const data = await res.json()
         setBooks(data)
@@ -102,7 +126,7 @@ export default function NovelWorkbench() {
     setSuccess(null)
 
     try {
-      const res = await fetch('http://localhost:5010/ai/generate', {
+      const res = await fetch(`${API}/ai/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim() }),
@@ -124,177 +148,222 @@ export default function NovelWorkbench() {
     }
   }
 
-  // View book details
+  // View book details + load versions
   const handleViewBook = async (book: Book) => {
     try {
-      const res = await fetch(`http://localhost:5010/ai/books/${book.id}`)
+      const res = await fetch(`${API}/ai/books/${book.id}`)
       if (res.ok) {
         const data = await res.json()
         setSelectedBook(data)
-        setBookDialogOpen(true)
+        setCurrentOutline(JSON.stringify(data.volumes, null, 2))
+
+        // Load versions
+        const verRes = await fetch(`${API}/ai/books/${book.id}/versions`)
+        if (verRes.ok) {
+          const verData = await verRes.json()
+          setVersions(verData)
+        }
       }
     } catch {
       setError('无法加载书籍详情')
     }
   }
 
+  // Refine outline
+  const handleRefine = async () => {
+    if (!refinePrompt.trim()) {
+      setError('请输入修改要求')
+      return
+    }
+    if (!selectedBook) return
+
+    setRefining(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`${API}/ai/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: selectedBook.id,
+          prompt: refinePrompt.trim(),
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || `HTTP ${res.status}`)
+      }
+
+      const result = await res.json()
+      setSuccess(`✅ 版本 ${result.versionId} 生成成功`)
+      setRefinePrompt('')
+
+      // Reload book data
+      const bookRes = await fetch(`${API}/ai/books/${selectedBook.id}`)
+      if (bookRes.ok) {
+        const bookData = await bookRes.json()
+        setSelectedBook(bookData)
+        setCurrentOutline(JSON.stringify(bookData.volumes, null, 2))
+      }
+
+      // Reload versions
+      const verRes = await fetch(`${API}/ai/books/${selectedBook.id}/versions`)
+      if (verRes.ok) {
+        const verData = await verRes.json()
+        setVersions(verData)
+      }
+    } catch (err: any) {
+      setError(err.message || '修订失败')
+    } finally {
+      setRefining(false)
+    }
+  }
+
+  // Switch to a version
+  const handleSwitchVersion = async (version: Version) => {
+    try {
+      const res = await fetch(`${API}/ai/books/${selectedBook?.id}/versions/${version.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setCurrentOutline(JSON.stringify(data.volumes, null, 2))
+      }
+    } catch {
+      setError('无法加载版本')
+    }
+  }
+
   // Delete book
   const handleDelete = async (id: number) => {
+    if (!confirm('确定删除此书及其所有版本？')) return
     try {
-      await fetch(`http://localhost:5010/ai/books/${id}`, { method: 'DELETE' })
+      await fetch(`${API}/ai/books/${id}`, { method: 'DELETE' })
       setBooks((prev) => prev.filter((b) => b.id !== id))
-      if (selectedBook?.id === id) {
-        setSelectedBook(null)
-        setBookDialogOpen(false)
-      }
+      setSelectedBook(null)
+      setCurrentOutline(null)
+      setVersions([])
     } catch {
       setError('删除失败')
     }
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" gutterBottom sx={{ color: '#4fc08d', fontWeight: 'bold' }}>
-        ✍️ AI 小说工作台
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        输入一句话灵感，AI 为你生成完整小说大纲（书名、简介、卷规划、章节列表）
-      </Typography>
-
-      {/* Input Section */}
-      <Paper elevation={3} sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-        <Typography variant="h6" gutterBottom sx={{ color: '#e040fb' }}>
-          <AutoFixHighIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          一句话生成大纲
-        </Typography>
-
-        <TextField
-          fullWidth
-          multiline
-          rows={4}
-          placeholder="例如：一个落魄的剑客在末日废墟中找回了最后的尊严..."
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          variant="outlined"
-          sx={{ mb: 2 }}
-        />
-
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* LEFT PANEL: Book list */}
+      <Paper
+        elevation={2}
+        sx={{
+          width: 280,
+          minWidth: 280,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          borderRight: '1px solid #333',
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: '1px solid #333' }}>
+          <Typography variant="h6" sx={{ color: '#4fc08d', fontWeight: 'bold', mb: 1 }}>
+            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            小说工作台
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            placeholder="一句话灵感，AI 生成大纲..."
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            variant="outlined"
+            size="small"
+            sx={{ mb: 1 }}
+          />
           <Button
+            fullWidth
             variant="contained"
             onClick={handleGenerate}
             disabled={loading || !prompt.trim()}
-            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <AutoFixHighIcon />}
-            sx={{ minWidth: 160 }}
+            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+            size="small"
+            sx={{ bgcolor: '#e040fb', '&:hover': { bgcolor: '#c2185b' } }}
           >
-            {loading ? 'AI 生成中...' : '✨ 生成大纲'}
+            {loading ? '生成中...' : '✨ 生成大纲'}
           </Button>
+        </Box>
+
+        {/* Book list */}
+        <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+          {books.length === 0 && (
+            <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 3 }}>
+              暂无大纲
+            </Typography>
+          )}
+          {books.map((book) => (
+            <Card
+              key={book.id}
+              variant="outlined"
+              sx={{
+                mb: 1,
+                cursor: 'pointer',
+                border: selectedBook?.id === book.id ? '1px solid #4fc08d' : undefined,
+                bgcolor: selectedBook?.id === book.id ? '#1a2e1a' : 'transparent',
+                '&:hover': { borderColor: '#4fc08d' },
+              }}
+              onClick={() => handleViewBook(book)}
+            >
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Typography variant="body2" sx={{ color: '#4fc08d', fontWeight: 'bold', mb: 0.5 }}>
+                  {book.title}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                  <Chip label={book.status} size="small" color={book.status === 'ready' ? 'success' : 'warning'} />
+                  <Chip label={new Date(book.created_at).toLocaleDateString('zh-CN')} size="small" />
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
         </Box>
       </Paper>
 
-      {/* Alerts */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
-
-      {/* Book List */}
-      {books.length > 0 && (
-        <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-          <Typography variant="h6" gutterBottom sx={{ color: '#4fc08d' }}>
-            <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-            已生成大纲
-          </Typography>
-
-          <Grid container spacing={2}>
-            {books.map((book) => (
-              <Grid item xs={12} sm={6} md={4} key={book.id}>
-                <Card
-                  variant="outlined"
-                  sx={{
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    '&:hover': { borderColor: '#4fc08d' },
-                  }}
-                  onClick={() => handleViewBook(book)}
-                >
-                  <CardContent>
-                    <Typography variant="h6" sx={{ color: '#4fc08d', mb: 1 }}>
-                      {book.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {book.synopsis}
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      <Chip label={book.status} size="small" color={book.status === 'ready' ? 'success' : 'warning'} />
-                      <Chip label={new Date(book.created_at).toLocaleDateString('zh-CN')} size="small" />
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Paper>
-      )}
-
-      {/* Book Detail Dialog */}
-      <Dialog
-        open={bookDialogOpen}
-        onClose={() => setBookDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{selectedBook?.title}</span>
-          <Box>
-            <IconButton onClick={() => selectedBook && handleDelete(selectedBook.id)} sx={{ mr: 1 }}>
-              <DeleteIcon color="error" />
-            </IconButton>
-            <IconButton onClick={() => setBookDialogOpen(false)}>
-              ✕
-            </IconButton>
-          </Box>
-        </DialogTitle>
-
-        <DialogContent dividers>
-          {selectedBook && (
-            <>
-              <Typography variant="subtitle1" sx={{ mb: 2, color: '#e040fb' }}>
-                灵感来源
-              </Typography>
-              <Paper sx={{ p: 2, mb: 3, bgcolor: '#1a1a2e' }}>
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  "{selectedBook.prompt}"
+      {/* CENTER PANEL: Outline display + refine input */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {selectedBook ? (
+          <>
+            {/* Header */}
+            <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box>
+                <Typography variant="h6" sx={{ color: '#4fc08d' }}>
+                  {selectedBook.title}
                 </Typography>
-              </Paper>
+                <Typography variant="caption" color="text.secondary">
+                  灵感："{selectedBook.prompt}"
+                </Typography>
+              </Box>
+              <Box>
+                <Tooltip title="删除">
+                  <IconButton onClick={() => handleDelete(selectedBook.id)} color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
 
-              <Typography variant="subtitle1" sx={{ mb: 2, color: '#4fc08d' }}>
-                故事简介
-              </Typography>
-              <Typography variant="body1" sx={{ mb: 3 }}>{selectedBook.synopsis}</Typography>
-
-              <Divider sx={{ my: 2 }} />
-
+            {/* Outline display */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {/* Volumes accordion */}
               {selectedBook.volumes && selectedBook.volumes.length > 0 && (
-                <>
-                  <Typography variant="subtitle1" sx={{ mb: 2, color: '#4fc08d' }}>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ color: '#ff9800', mb: 1 }}>
                     卷规划（{selectedBook.volumes.length} 卷）
                   </Typography>
                   {selectedBook.volumes.map((vol, volIdx) => (
-                    <Accordion key={vol.id || volIdx} sx={{ mb: 1 }}>
+                    <Accordion key={vol.id || volIdx} sx={{ mb: 0.5 }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Box>
                           <Typography variant="subtitle2" sx={{ color: '#ff9800' }}>
                             第{volIdx + 1}卷：{vol.title}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            主题：{vol.theme} | {parseChapters(vol.chapters).length} 章
+                            {vol.theme} | {parseChapters(vol.chapters).length} 章
                           </Typography>
                         </Box>
                       </AccordionSummary>
@@ -303,7 +372,7 @@ export default function NovelWorkbench() {
                           {vol.synopsis}
                         </Typography>
                         {parseChapters(vol.chapters).map((ch, chIdx) => (
-                          <Box key={chIdx} sx={{ mb: 1, pl: 2 }}>
+                          <Box key={chIdx} sx={{ mb: 0.5, pl: 2 }}>
                             <Typography variant="body2" sx={{ color: '#4fc08d' }}>
                               第{chIdx + 1}章：{ch.title}
                             </Typography>
@@ -315,16 +384,121 @@ export default function NovelWorkbench() {
                       </AccordionDetails>
                     </Accordion>
                   ))}
-                </>
+                </Box>
               )}
-            </>
-          )}
-        </DialogContent>
+            </Box>
 
-        <DialogActions>
-          <Button onClick={() => setBookDialogOpen(false)}>关闭</Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+            {/* Refine section */}
+            <Divider />
+            <Paper elevation={3} sx={{ p: 2, borderTop: '1px solid #333' }}>
+              <Typography variant="subtitle2" sx={{ color: '#e040fb', mb: 1 }}>
+                <RefreshIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 18 }} />
+                调整大纲
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                placeholder="输入修改要求，例如：把第一卷的章节增加到8章，增加一个反派角色..."
+                value={refinePrompt}
+                onChange={(e) => setRefinePrompt(e.target.value)}
+                variant="outlined"
+                size="small"
+                sx={{ mb: 1 }}
+              />
+              <Button
+                variant="contained"
+                onClick={handleRefine}
+                disabled={refining || !refinePrompt.trim()}
+                startIcon={refining ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                size="small"
+                sx={{ bgcolor: '#e040fb', '&:hover': { bgcolor: '#c2185b' } }}
+              >
+                {refining ? 'AI 修订中...' : '🔄 修订大纲'}
+              </Button>
+            </Paper>
+          </>
+        ) : (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <Typography variant="h5" color="text.secondary">
+              选择左侧的大纲开始编辑
+            </Typography>
+          </Box>
+        )}
+      </Box>
+
+      {/* RIGHT PANEL: Version history */}
+      <Paper
+        elevation={2}
+        sx={{
+          width: 260,
+          minWidth: 260,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          borderLeft: '1px solid #333',
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: '1px solid #333' }}>
+          <Typography variant="subtitle2" sx={{ color: '#4fc08d', fontWeight: 'bold' }}>
+            <HistoryIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            版本历史
+          </Typography>
+        </Box>
+
+        <Box sx={{ flex: 1, overflow: 'auto' }}>
+          {versions.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 3, px: 2 }}>
+              暂无修订版本
+            </Typography>
+          ) : (
+            <List dense>
+              {versions.map((ver) => (
+                <ListItem key={ver.id} disablePadding sx={{ mb: 0.5 }}>
+                  <ListItemButton
+                    onClick={() => handleSwitchVersion(ver)}
+                    sx={{
+                      borderLeft: '3px solid transparent',
+                      '&.Mui-selected': { borderLeftColor: '#4fc08d', bgcolor: '#1a2e1a' },
+                      '&:hover': { borderLeftColor: '#4fc08d' },
+                    }}
+                  >
+                    <ListItemText
+                      primary={
+                        <Typography variant="body2" sx={{ color: '#4fc08d', fontWeight: 'bold' }}>
+                          v{ver.id}
+                        </Typography>
+                      }
+                      secondary={
+                        <>
+                          <Typography variant="caption" sx={{ display: 'block', color: '#aaa' }}>
+                            {ver.refine_prompt?.substring(0, 30)}...
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(ver.created_at).toLocaleString('zh-CN')}
+                          </Typography>
+                        </>
+                      }
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Box>
+      </Paper>
+
+      {/* Alerts */}
+      {error && (
+        <Alert severity="error" sx={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, maxWidth: 400 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+      {success && (
+        <Alert severity="success" sx={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, maxWidth: 400 }} onClose={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      )}
+    </Box>
   )
 }
