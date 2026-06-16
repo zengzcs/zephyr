@@ -1,40 +1,32 @@
-import { sqliteTable, text, integer, blob, primaryKey } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
-// Users
-export const users = sqliteTable('users', {
+// AI Novel Workbench tables
+export const books = sqliteTable('books', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  email: text('email').notNull().unique(),
-  username: text('username').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  avatar: text('avatar'),
-  role: text('role').default('user').notNull(),
-  isActive: integer('is_active', { mode: 'boolean' }).default(true).notNull(),
-  lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
+  title: text('title').notNull(),
+  synopsis: text('synopsis').notNull(),
+  prompt: text('prompt').notNull(), // the one-sentence prompt used to generate
+  aiModel: text('ai_model').default('default'),
+  status: text('status').default('generating').notNull(), // generating | ready | editing
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),
 });
 
-// Sessions (stored in Redis, but schema for reference)
-export const sessions = sqliteTable('sessions', {
+export const volumes = sqliteTable('volumes', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  userId: integer('user_id')
-    .references(() => users.id, { onDelete: 'cascade' })
-    .notNull(),
-  token: text('token').notNull().unique(),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  bookId: integer('book_id').references(() => books.id, { onDelete: 'cascade' }).notNull(),
+  order: integer('order').notNull(),
+  title: text('title').notNull(),
+  theme: text('theme'),
+  synopsis: text('synopsis'),
+  chapters: text('chapters', { mode: 'json' }), // array of { order, title, synopsis }
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),
 });
 
-// Audit log
-export const auditLogs = sqliteTable('audit_logs', {
+export const prompts = sqliteTable('prompts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  userId: integer('user_id').references(() => users.id),
-  action: text('action').notNull(),
-  entity: text('entity'),
-  entityId: text('entity_id'),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
-  details: text('details', { mode: 'json' }),
+  bookId: integer('book_id').references(() => books.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // system | user | assistant
+  content: text('content', { mode: 'json' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),
 });

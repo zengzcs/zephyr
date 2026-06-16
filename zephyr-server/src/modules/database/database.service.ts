@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { db } from './database';
+import { db, sqlite } from './database';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
@@ -15,8 +15,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return db;
   }
 
-  /** Raw bun:sqlite instance for direct queries */
+  /** Raw bun:sqlite instance for direct queries (prepare/run/all) */
   getRawDb() {
-    return (db as any)._client;
+    return sqlite;
   }
 }

@@ -16,3 +16,4 @@ sqlite.exec('PRAGMA foreign_keys = ON');
 export const db = drizzle(sqlite);
 
 export type DatabaseType = typeof db;
+export { sqlite };
