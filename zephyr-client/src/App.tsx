@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
-import App from './App'
+import Home from './pages/Home'
 import Monitor from './pages/Monitor'
 
 const darkTheme = createTheme({
@@ -15,7 +15,7 @@ function Root() {
       <CssBaseline />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<App />} />
+          <Route path="/" element={<Home />} />
           <Route path="/monitor" element={<Monitor />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
