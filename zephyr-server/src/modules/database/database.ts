@@ -1,4 +1,3 @@
-import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -10,7 +9,7 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const sqlite = new Database(dbPath);
+const sqlite = new (require('bun:sqlite').Database)(dbPath);
 sqlite.exec('PRAGMA journal_mode = WAL');
 sqlite.exec('PRAGMA foreign_keys = ON');
 

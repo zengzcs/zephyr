@@ -14,4 +14,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   getDb() {
     return db;
   }
+
+  /** Raw bun:sqlite instance for direct queries */
+  getRawDb() {
+    return (db as any)._client;
+  }
 }

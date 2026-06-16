@@ -111,7 +111,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async checkRateLimit(key: string, limit: number): boolean {
+  async checkRateLimit(key: string, limit: number): Promise<boolean> {
     const count = await this.incrementRateLimit(key, 60);
     return count <= limit;
   }

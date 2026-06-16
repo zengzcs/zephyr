@@ -18,7 +18,7 @@ export class HealthController {
 
     // Check database
     try {
-      await this.databaseService.getDb().select().limit(0);
+      this.databaseService.getRawDb().exec('SELECT 1');
       result.database = 'connected';
     } catch {
       result.database = 'disconnected';
