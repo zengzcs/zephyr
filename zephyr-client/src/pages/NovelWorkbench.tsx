@@ -34,7 +34,20 @@ interface Volume {
   title: string
   theme: string
   synopsis: string
-  chapters: VolumeChapter[]
+  chapters: VolumeChapter[] | string
+}
+
+/** Safely parse chapters JSON string to array */
+function parseChapters(chapters: VolumeChapter[] | string): VolumeChapter[] {
+  if (Array.isArray(chapters)) return chapters
+  if (typeof chapters === 'string') {
+    try {
+      return JSON.parse(chapters)
+    } catch {
+      return []
+    }
+  }
+  return []
 }
 
 interface Book {
@@ -281,7 +294,7 @@ export default function NovelWorkbench() {
                             第{volIdx + 1}卷：{vol.title}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            主题：{vol.theme} | {vol.chapters?.length || 0} 章
+                            主题：{vol.theme} | {parseChapters(vol.chapters).length} 章
                           </Typography>
                         </Box>
                       </AccordionSummary>
@@ -289,7 +302,7 @@ export default function NovelWorkbench() {
                         <Typography variant="body2" sx={{ mb: 1, color: '#aaa' }}>
                           {vol.synopsis}
                         </Typography>
-                        {vol.chapters?.map((ch, chIdx) => (
+                        {parseChapters(vol.chapters).map((ch, chIdx) => (
                           <Box key={chIdx} sx={{ mb: 1, pl: 2 }}>
                             <Typography variant="body2" sx={{ color: '#4fc08d' }}>
                               第{chIdx + 1}章：{ch.title}
