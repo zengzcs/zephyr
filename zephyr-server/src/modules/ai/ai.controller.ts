@@ -84,6 +84,20 @@ export class AiController {
       }
     }
 
+    // Create initial version record (v1) for version history
+    const versionStmt = this.rawDb.prepare(`
+      INSERT INTO versions (book_id, title, synopsis, style, outline_json, refine_prompt, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `);
+    versionStmt.run(
+      result.lastInsertRowid,
+      outline.title,
+      outline.synopsis,
+      outline.style || '',
+      JSON.stringify(outline),
+      `初始生成: ${prompt}`,
+    );
+
     return {
       success: true,
       bookId: result.lastInsertRowid,

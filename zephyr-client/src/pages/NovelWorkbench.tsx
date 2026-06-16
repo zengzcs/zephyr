@@ -162,6 +162,17 @@ export default function NovelWorkbench() {
         if (verRes.ok) {
           const verData = await verRes.json()
           setVersions(verData)
+          // Auto-select the initial version (first in the list, which is the oldest/initial)
+          if (verData.length > 0) {
+            const initialVer = verData[verData.length - 1]
+            setSelectedVersionId(initialVer.id)
+            // Load initial version's volumes to display in center panel
+            const verDetailRes = await fetch(`${API}/ai/books/${book.id}/versions/${initialVer.id}`)
+            if (verDetailRes.ok) {
+              const verDetail = await verDetailRes.json()
+              setCurrentOutline(JSON.stringify(verDetail.volumes, null, 2))
+            }
+          }
         }
       }
     } catch {
