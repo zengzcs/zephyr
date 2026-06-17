@@ -174,7 +174,7 @@ export class AiController {
       for (let i = 0; i < refined.volumes.length; i++) {
         const vol = refined.volumes[i];
         const chaptersJson = JSON.stringify(vol.chapters || []);
-        volStmt.run(versionResult.lastInsertRowid, i + 1, vol.title, vol.theme, vol.synopsis, chaptersJson);
+        volStmt.run(bookId, i + 1, vol.title, vol.theme, vol.synopsis, chaptersJson);
       }
     }
 
@@ -215,7 +215,7 @@ export class AiController {
 
     const volumes = this.rawDb.prepare(
       'SELECT * FROM volumes WHERE book_id = ? ORDER BY "order"',
-    ).all(versionId);
+    ).all(id);
 
     return {
       ...version,
