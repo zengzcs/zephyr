@@ -28,6 +28,14 @@ const SaveChapterDto = z.object({
   body: z.string().max(50000),
 });
 
+const RefineChapterDto = z.object({
+  bookId: z.number(),
+  volumeIndex: z.number(),
+  chapterIndex: z.number(),
+  body: z.string().max(50000),
+  prompt: z.string().min(1).max(2000),
+});
+
 interface VolumeChapter {
   title: string;
   synopsis: string;
@@ -283,6 +291,90 @@ ${context}
     this.rawDb.prepare('UPDATE volumes SET chapters = ? WHERE id = ?').run(JSON.stringify(chapters), volume.id);
 
     return { success: true };
+  }
+
+ @Post('chapters/refine')
+  @HttpCode(HttpStatus.OK)
+  async refineChapter(@Body() body: z.infer<typeof RefineChapterDto>) {
+    const { bookId, volumeIndex, chapterIndex, body: chapterBody, prompt } = body;
+
+    const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
+    if (!book) throw new Error('Book not found');
+
+    const volumes = this.rawDb.prepare('SELECT * FROM volumes WHERE book_id = ? ORDER BY "order"').all(bookId);
+    if (!volumes || volumes.length === 0) throw new Error('No volumes found for this book');
+
+    const volume = volumes[volumeIndex];
+    if (!volume) throw new Error('Volume not found');
+
+    const chapters = typeof volume.chapters === 'string' ? JSON.parse(volume.chapters) : volume.chapters;
+    if (!chapters[chapterIndex]) throw new Error('Chapter not found');
+
+    const chapter = chapters[chapterIndex];
+
+    const context = `书名：${book.title}\n故事概要：${book.synopsis}\n\n`
+      + `当前卷：${volume.title}（${volume.synopsis}）\n`
+      + `当前章节：第${chapterIndex + 1}章「${chapter.title}」\n`
+      + `章节概要：${chapter.synopsis}\n\n`
+      + `当前正文：\n${chapter.body || '（暂无正文）'}`;
+
+    const systemPrompt = `你是一位专业的网络小说作家。根据以下上下文和用户要求，对指定章节正文进行调整。
+
+${context}
+
+用户要求：${prompt}
+
+请输出调整后的完整正文，不要包含章节标题。保持原有风格，字数在800-2000字之间。使用中文写作。`;
+
+    const bodyContent = await this.aiService.chatCompletion({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `请调整第${chapterIndex + 1}章正文。` },
+      ],
+      temperature: 0.8,
+      maxTokens: 4096,
+    });
+
+    return {
+      success: true,
+      bookId,
+      volumeIndex,
+      chapterIndex,
+      body: bodyContent,
+    };
+  }
+
+  @Post('chapters/version')
+  @HttpCode(HttpStatus.OK)
+  async saveChapterVersion(@Body() body: z.infer<typeof RefineChapterDto>) {
+    const { bookId, volumeIndex, chapterIndex, body: chapterBody, prompt } = body;
+
+    const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
+    if (!book) throw new Error('Book not found');
+
+    const result = this.rawDb.prepare(`
+      INSERT INTO chapter_body_versions (book_id, volume_index, chapter_index, body, refine_prompt, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(bookId, volumeIndex, chapterIndex, chapterBody, prompt || '手动保存');
+
+    return { success: true, versionId: result.lastInsertRowid };
+  }
+
+  @Get('books/:bookId/volumes/:volumeIndex/chapters/:chapterIndex/versions')
+  async getChapterVersions(@Param('bookId') bookId: string, @Param('volumeIndex') volumeIndex: string, @Param('chapterIndex') chapterIndex: string) {
+    const versions = this.rawDb.prepare(
+      'SELECT id, book_id, volume_index, chapter_index, body, refine_prompt, created_at FROM chapter_body_versions WHERE book_id = ? AND volume_index = ? AND chapter_index = ? ORDER BY created_at DESC',
+    ).all(bookId, volumeIndex, chapterIndex);
+    return versions;
+  }
+
+  @Get('books/:bookId/volumes/:volumeIndex/chapters/:chapterIndex/versions/:versionId')
+  async getChapterVersion(@Param('bookId') bookId: string, @Param('volumeIndex') volumeIndex: string, @Param('chapterIndex') chapterIndex: string, @Param('versionId') versionId: string) {
+    const version = this.rawDb.prepare(
+      'SELECT * FROM chapter_body_versions WHERE id = ? AND book_id = ? AND volume_index = ? AND chapter_index = ?',
+    ).get(versionId, bookId, volumeIndex, chapterIndex);
+    if (!version) throw new Error('Version not found');
+    return version;
   }
 
   @Get('books')

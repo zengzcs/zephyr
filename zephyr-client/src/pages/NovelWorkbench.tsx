@@ -25,6 +25,7 @@ import {
   DialogActions,
   Tab,
   Tabs,
+  Collapse,
 } from '@mui/material'
 import {
   Delete as DeleteIcon,
@@ -35,6 +36,10 @@ import {
   Refresh as RefreshIcon,
   Edit as EditIcon,
   MenuBook as MenuBookIcon,
+  Save as SaveIcon,
+  ExpandMore as ExpandMore,
+  ExpandLess as ExpandLess,
+  Replay as ReplayIcon,
 } from '@mui/icons-material'
 
 interface VolumeChapter {
@@ -116,6 +121,13 @@ export default function NovelWorkbench() {
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
   const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+
+  // Chapter body version history state
+  const [chapterVersions, setChapterVersions] = useState<any[]>([])
+  const [chapterVersionExpanded, setChapterVersionExpanded] = useState(false)
+  const [chapterRefinePrompt, setChapterRefinePrompt] = useState('')
+  const [chapterRefining, setChapterRefining] = useState(false)
+  const [chapterSaving, setChapterSaving] = useState(false)
 
   const API = 'http://192.168.1.200:5010'
 
@@ -355,6 +367,129 @@ export default function NovelWorkbench() {
     }
   }, [selectedBook, selectedChapter, API])
 
+  // Load chapter body version history
+  const loadChapterVersions = useCallback(async () => {
+    if (!selectedBook || !selectedChapter) return
+    try {
+      const res = await fetch(
+        `${API}/ai/books/${selectedBook.id}/volumes/${selectedChapter.volumeIdx}/chapters/${selectedChapter.chapterIdx}/versions`,
+      )
+      if (res.ok) {
+        const data = await res.json()
+        setChapterVersions(data)
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [selectedBook, selectedChapter, API])
+
+  // Open chapter modal - also load version history
+  const openChapterModal = (volIdx: number, chIdx: number, ch: VolumeChapter) => {
+    setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
+    setChapterBody(ch.body || '')
+    setChapterAiPrompt(ch.synopsis)
+    setChapterTab(0)
+    setChapterVersions([])
+    setChapterVersionExpanded(false)
+    setChapterRefinePrompt('')
+    setChapterRefining(false)
+    setChapterSaving(false)
+    setChapterModalOpen(true)
+  }
+
+  // Save chapter body version (manual save)
+  const saveChapterBodyVersion = useCallback(async () => {
+    if (!selectedBook || !selectedChapter) return
+    try {
+      setChapterSaving(true)
+      const res = await fetch(`${API}/ai/chapters/version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: selectedBook.id,
+          volumeIndex: selectedChapter.volumeIdx,
+          chapterIndex: selectedChapter.chapterIdx,
+          body: chapterBody,
+          prompt: '手动保存',
+        }),
+      })
+      if (res.ok) {
+        setSuccess('✅ 章节版本已保存')
+        await loadChapterVersions()
+      }
+    } catch {
+      setError('保存版本失败')
+    } finally {
+      setChapterSaving(false)
+    }
+  }, [selectedBook, selectedChapter, chapterBody, API, loadChapterVersions])
+
+  // AI refine chapter body
+  const handleRefineChapterBody = async () => {
+    if (!chapterRefinePrompt.trim() || !selectedBook || !selectedChapter) return
+    if (!chapterBody.trim()) {
+      setError('当前章节没有正文，无法调整。请先生成或撰写正文。')
+      return
+    }
+
+    setChapterRefining(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`${API}/ai/chapters/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: selectedBook.id,
+          volumeIndex: selectedChapter.volumeIdx,
+          chapterIndex: selectedChapter.chapterIdx,
+          body: chapterBody,
+          prompt: chapterRefinePrompt.trim(),
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || `HTTP ${res.status}`)
+      }
+
+      const result = await res.json()
+      const refinedBody = typeof result.body === 'string' ? result.body : (result.body?.content || '')
+      setChapterBody(refinedBody)
+      setSuccess('✅ 章节正文调整完成')
+      setChapterRefinePrompt('')
+      // Auto-save the refined version
+      try {
+        await fetch(`${API}/ai/chapters/version`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookId: selectedBook.id,
+            volumeIndex: selectedChapter.volumeIdx,
+            chapterIndex: selectedChapter.chapterIdx,
+            body: refinedBody,
+            prompt: `AI 调整: ${chapterRefinePrompt.trim()}`,
+          }),
+        })
+        await loadChapterVersions()
+      } catch {
+        // Non-critical
+      }
+    } catch (err: any) {
+      setError(err.message || 'AI 调整章节失败')
+    } finally {
+      setChapterRefining(false)
+    }
+  }
+
+  // Restore a chapter body version
+  const restoreChapterVersion = async (version: any) => {
+    if (!confirm(`确定恢复到版本 v${version.id}？当前内容将被覆盖。`)) return
+    setChapterBody(version.body)
+    setSuccess(`✅ 已恢复到版本 v${version.id}`)
+    await loadChapterVersions()
+  }
+
   // Debounced save handler for chapter body changes
   const handleChapterBodyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -512,13 +647,7 @@ export default function NovelWorkbench() {
                                 cursor: 'pointer',
                                 '&:hover': { color: '#81c784' },
                               }}
-                              onClick={() => {
-                                setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
-                                setChapterBody(ch.body || '')
-                                setChapterAiPrompt(ch.synopsis)
-                                setChapterTab(0)
-                                setChapterModalOpen(true)
-                              }}
+                              onClick={() => openChapterModal(volIdx, chIdx, ch)}
                             >
                               <Typography variant="body2" sx={{ color: '#4fc08d' }}>
                                 第{chIdx + 1}章：{ch.title}
@@ -723,6 +852,40 @@ export default function NovelWorkbench() {
                     </Typography>
                   </Box>
 
+                  {/* AI Refine Section */}
+                  <Box sx={{ mb: 2, p: 2, bgcolor: '#1a1a2e', borderRadius: 1, border: '1px solid #333' }}>
+                    <Typography variant="subtitle2" sx={{ color: '#ff9800', mb: 1 }}>
+                      <RefreshIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      AI 调整章节正文
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      placeholder="输入调整要求，例如：增加对话、加强冲突、补充细节描写..."
+                      value={chapterRefinePrompt}
+                      onChange={(e) => setChapterRefinePrompt(e.target.value)}
+                      variant="outlined"
+                      size="small"
+                      sx={{ mb: 1 }}
+                      disabled={!chapterBody.trim()}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleRefineChapterBody}
+                      disabled={chapterRefining || !chapterRefinePrompt.trim() || !chapterBody.trim()}
+                      startIcon={chapterRefining ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                      size="small"
+                      sx={{ bgcolor: '#ff9800', '&:hover': { bgcolor: '#f57c00' } }}
+                    >
+                      {chapterRefining ? 'AI 调整中...' : '🔄 AI 调整正文'}
+                    </Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                      基于当前正文进行调整，调整后的版本自动保存为历史版本
+                    </Typography>
+                  </Box>
+
                   {/* Chapter Body */}
                   <TextField
                     fullWidth
@@ -737,6 +900,89 @@ export default function NovelWorkbench() {
                       '& .MuiOutlinedInput-input': { color: '#e0e0e0', fontFamily: 'Georgia, serif' },
                     }}
                   />
+
+                  {/* Save Button */}
+                  <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="contained"
+                      onClick={saveChapterBodyVersion}
+                      disabled={chapterSaving || !chapterBody.trim()}
+                      startIcon={chapterSaving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                      size="small"
+                      sx={{ bgcolor: '#4fc08d', '&:hover': { bgcolor: '#388e3c' } }}
+                    >
+                      {chapterSaving ? '保存中...' : '💾 保存版本'}
+                    </Button>
+                  </Box>
+
+                  {/* Chapter Body Version History */}
+                  <Box sx={{ mt: 2 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        p: 1,
+                        bgcolor: '#1a1a2e',
+                        borderRadius: 1,
+                        border: '1px solid #333',
+                      }}
+                      onClick={() => setChapterVersionExpanded(!chapterVersionExpanded)}
+                    >
+                      <Typography variant="subtitle2" sx={{ color: '#aaa' }}>
+                        <HistoryIcon sx={{ mr: 1, verticalAlign: 'middle', fontSize: 16 }} />
+                        正文版本历史 ({chapterVersions.length})
+                      </Typography>
+                      {chapterVersionExpanded ? <ExpandLess sx={{ fontSize: 16, color: '#aaa' }} /> : <ExpandMore sx={{ fontSize: 16, color: '#aaa' }} />}
+                    </Box>
+                    <Collapse in={chapterVersionExpanded}>
+                      {chapterVersions.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1, px: 1 }}>
+                          暂无正文版本记录
+                        </Typography>
+                      ) : (
+                        <List dense sx={{ bgcolor: '#0f0f23', borderRadius: 1, mt: 1 }}>
+                          {chapterVersions.map((ver) => (
+                            <ListItemButton
+                              key={ver.id}
+                              component="li"
+                              onClick={() => restoreChapterVersion(ver)}
+                              sx={{
+                                mb: 0.5,
+                                px: 1,
+                                borderLeft: '3px solid transparent',
+                                '&:hover': { borderLeftColor: '#4fc08d' },
+                              }}
+                            >
+                              <ListItemText
+                                primary={
+                                  <Typography variant="body2" sx={{ color: '#4fc08d', fontSize: '0.75rem' }}>
+                                    v{ver.id}
+                                  </Typography>
+                                }
+                                secondary={
+                                  <>
+                                    <Typography variant="caption" sx={{ display: 'block', color: '#aaa', fontSize: '0.65rem' }}>
+                                      {ver.refine_prompt?.substring(0, 30)}...
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
+                                      {ver.created_at}
+                                    </Typography>
+                                  </>
+                                }
+                              />
+                              <Tooltip title="恢复到这个版本">
+                                <IconButton size="small" sx={{ color: '#4fc08d' }}>
+                                  <ReplayIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </ListItemButton>
+                          ))}
+                        </List>
+                      )}
+                    </Collapse>
+                  </Box>
                 </Box>
               )}
             </DialogContent>
