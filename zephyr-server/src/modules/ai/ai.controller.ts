@@ -213,14 +213,33 @@ export class AiController {
     const version = this.rawDb.prepare('SELECT * FROM versions WHERE id = ? AND book_id = ?').get(versionId, id);
     if (!version) throw new Error('Version not found');
 
-    const volumes = this.rawDb.prepare(
-      'SELECT * FROM volumes WHERE book_id = ? ORDER BY "order"',
-    ).all(id);
+    // Parse outline_json to get the volumes for this specific version
+    let outlineData: any;
+    try {
+      outlineData = typeof version.outline_json === 'string'
+        ? JSON.parse(version.outline_json)
+        : version.outline_json;
+    } catch {
+      outlineData = {};
+    }
+
+    // Convert outline volumes to the same format as volumes table
+    const outlineVolumes = outlineData.volumes || [];
+    const volumes = outlineVolumes.map((v: any, index: number) => ({
+      id: index + 1,
+      book_id: id,
+      order: index + 1,
+      title: v.title || '',
+      theme: v.theme || '',
+      synopsis: v.synopsis || '',
+      chapters: typeof v.chapters === 'string' ? v.chapters : JSON.stringify(v.chapters || []),
+      created_at: version.created_at,
+    }));
 
     return {
       ...version,
-      outline: typeof version.outline_json === 'string' ? JSON.parse(version.outline_json) : version.outline_json,
-      volumes: volumes || [],
+      outline: outlineData,
+      volumes: volumes,
     };
   }
 
