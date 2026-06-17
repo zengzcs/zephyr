@@ -90,8 +90,8 @@ export default function NovelWorkbench() {
   // Version history state
   const [versions, setVersions] = useState<Version[]>([])
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
-  const [_versionsExpanded, _setVersionsExpanded] = useState(true)
-  const [_currentOutline, setCurrentOutline] = useState<string | null>(null)
+  // Displayed volumes for the current version (parsed from version detail API)
+  const [displayedVolumes, setDisplayedVolumes] = useState<Volume[]>([])
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
 
@@ -155,7 +155,6 @@ export default function NovelWorkbench() {
       if (res.ok) {
         const data = await res.json()
         setSelectedBook(data)
-        setCurrentOutline(JSON.stringify(data.volumes, null, 2))
 
         // Load versions
         const verRes = await fetch(`${API}/ai/books/${book.id}/versions`)
@@ -170,7 +169,7 @@ export default function NovelWorkbench() {
             const verDetailRes = await fetch(`${API}/ai/books/${book.id}/versions/${initialVer.id}`)
             if (verDetailRes.ok) {
               const verDetail = await verDetailRes.json()
-              setCurrentOutline(JSON.stringify(verDetail.volumes, null, 2))
+              setDisplayedVolumes(verDetail.volumes || [])
             }
           }
         }
@@ -210,19 +209,21 @@ export default function NovelWorkbench() {
       setSuccess(`✅ 版本 ${result.versionId} 生成成功`)
       setRefinePrompt('')
 
-      // Reload book data
-      const bookRes = await fetch(`${API}/ai/books/${selectedBook.id}`)
-      if (bookRes.ok) {
-        const bookData = await bookRes.json()
-        setSelectedBook(bookData)
-        setCurrentOutline(JSON.stringify(bookData.volumes, null, 2))
-      }
-
-      // Reload versions
+      // Reload versions and load the latest version's volumes
       const verRes = await fetch(`${API}/ai/books/${selectedBook.id}/versions`)
       if (verRes.ok) {
         const verData = await verRes.json()
         setVersions(verData)
+        // Load the latest version's volumes (last in list = newest)
+        if (verData.length > 0) {
+          const latestVer = verData[0]
+          const verDetailRes = await fetch(`${API}/ai/books/${selectedBook.id}/versions/${latestVer.id}`)
+          if (verDetailRes.ok) {
+            const verDetail = await verDetailRes.json()
+            setDisplayedVolumes(verDetail.volumes || [])
+            setSelectedVersionId(latestVer.id)
+          }
+        }
       }
     } catch (err: any) {
       setError(err.message || '修订失败')
@@ -237,7 +238,7 @@ export default function NovelWorkbench() {
       const res = await fetch(`${API}/ai/books/${selectedBook?.id}/versions/${version.id}`)
       if (res.ok) {
         const data = await res.json()
-        setCurrentOutline(JSON.stringify(data.volumes, null, 2))
+        setDisplayedVolumes(data.volumes || [])
         setSelectedVersionId(version.id)
       }
     } catch {
@@ -252,7 +253,7 @@ export default function NovelWorkbench() {
       await fetch(`${API}/ai/books/${id}`, { method: 'DELETE' })
       setBooks((prev) => prev.filter((b) => b.id !== id))
       setSelectedBook(null)
-      setCurrentOutline(null)
+      setDisplayedVolumes([])
       setVersions([])
     } catch {
       setError('删除失败')
@@ -362,12 +363,12 @@ export default function NovelWorkbench() {
             {/* Outline display */}
             <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
               {/* Volumes accordion */}
-              {selectedBook.volumes && selectedBook.volumes.length > 0 && (
+              {displayedVolumes && displayedVolumes.length > 0 ? (
                 <Box>
                   <Typography variant="subtitle2" sx={{ color: '#ff9800', mb: 1 }}>
-                    卷规划（{selectedBook.volumes.length} 卷）
+                    卷规划（{displayedVolumes.length} 卷）
                   </Typography>
-                  {selectedBook.volumes.map((vol, volIdx) => (
+                  {displayedVolumes.map((vol, volIdx) => (
                     <Accordion key={vol.id || volIdx} sx={{ mb: 0.5 }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Box>
@@ -397,6 +398,10 @@ export default function NovelWorkbench() {
                     </Accordion>
                   ))}
                 </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 3 }}>
+                  暂无大纲内容
+                </Typography>
               )}
             </Box>
 
