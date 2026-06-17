@@ -1,0 +1,4 @@
+-- Add body field to chapters JSON structure
+-- chapters JSON format changes from: {title, synopsis}
+-- to: {title, synopsis, body}
+-- No schema change needed - chapters stored as JSON text

@@ -21,6 +21,13 @@ const GenerateChapterDto = z.object({
   prompt: z.string().min(1).max(5000),
 });
 
+const SaveChapterDto = z.object({
+  bookId: z.number(),
+  volumeIndex: z.number(),
+  chapterIndex: z.number(),
+  body: z.string().max(50000),
+});
+
 interface VolumeChapter {
   title: string;
   synopsis: string;
@@ -226,6 +233,30 @@ ${context}
       chapterTitle,
       body: bodyContent,
     };
+  }
+
+  @Post('chapters/save')
+  @HttpCode(HttpStatus.OK)
+  async saveChapter(@Body() body: { bookId: number; volumeIndex: number; chapterIndex: number; body: string }) {
+    const { bookId, volumeIndex, chapterIndex, body: chapterBody } = SaveChapterDto.parse(body);
+
+    const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
+    if (!book) throw new Error('Book not found');
+
+    const volumes = this.rawDb.prepare('SELECT * FROM volumes WHERE book_id = ? ORDER BY "order"').all(bookId);
+    if (!volumes || volumes.length === 0) throw new Error('No volumes found for this book');
+
+    const volume = volumes[volumeIndex];
+    if (!volume) throw new Error('Volume not found');
+
+    const chapters = typeof volume.chapters === 'string' ? JSON.parse(volume.chapters) : volume.chapters;
+    if (!chapters[chapterIndex]) throw new Error('Chapter not found');
+
+    chapters[chapterIndex].body = chapterBody;
+
+    this.rawDb.prepare('UPDATE volumes SET chapters = ? WHERE id = ?').run(JSON.stringify(chapters), volume.id);
+
+    return { success: true };
   }
 
   @Get('books')

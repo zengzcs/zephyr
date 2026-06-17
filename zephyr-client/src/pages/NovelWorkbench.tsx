@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Typography,
   Box,
@@ -115,6 +115,7 @@ export default function NovelWorkbench() {
   const [chapterGenerating, setChapterGenerating] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
+  const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   const API = 'http://localhost:5010'
 
@@ -133,6 +134,9 @@ export default function NovelWorkbench() {
 
   useEffect(() => {
     fetchBooks()
+    return () => {
+      if (saveTimer) clearTimeout(saveTimer)
+    }
   }, [])
 
   // Generate outline
@@ -304,17 +308,60 @@ export default function NovelWorkbench() {
         throw new Error(errData.message || `HTTP ${res.status}`)
       }
 
-      const result = await res.json()
+    const result = await res.json()
       // result.body 可能是字符串（直接正文）或包含 content 字段（OpenAI 格式）
       const chapterText = typeof result.body === 'string' ? result.body : (result.body?.content || '')
       setChapterBody(chapterText)
       setSuccess(`✅ 章节正文生成成功`)
       setChapterAiPrompt('')
+      // Auto-save generated body to backend
+      try {
+        await fetch(`${API}/ai/chapters/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookId: selectedBook.id,
+            volumeIndex: selectedChapter.volumeIdx,
+            chapterIndex: selectedChapter.chapterIdx,
+            body: chapterText,
+          }),
+        })
+      } catch {
+        // Save failure is non-critical
+      }
     } catch (err: any) {
       setError(err.message || 'AI 生成章节失败')
     } finally {
       setChapterGenerating(false)
     }
+  }
+
+  // Save chapter body to backend
+  const saveChapterBody = useCallback(async (body: string) => {
+    if (!selectedBook || !selectedChapter) return
+    try {
+      await fetch(`${API}/ai/chapters/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: selectedBook.id,
+          volumeIndex: selectedChapter.volumeIdx,
+          chapterIndex: selectedChapter.chapterIdx,
+          body,
+        }),
+      })
+    } catch {
+      // Save failure is non-critical
+    }
+  }, [selectedBook, selectedChapter, API])
+
+  // Debounced save handler for chapter body changes
+  const handleChapterBodyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setChapterBody(value)
+    if (saveTimer) clearTimeout(saveTimer)
+    const timer = setTimeout(() => saveChapterBody(value), 1500)
+    setSaveTimer(timer)
   }
 
   // Delete book
@@ -683,7 +730,7 @@ export default function NovelWorkbench() {
                     rows={20}
                     placeholder="在此撰写章节正文内容..."
                     value={chapterBody}
-                    onChange={(e) => setChapterBody(e.target.value)}
+                    onChange={handleChapterBodyChange}
                     variant="outlined"
                     sx={{
                       '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
