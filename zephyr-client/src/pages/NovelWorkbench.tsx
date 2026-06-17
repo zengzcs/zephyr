@@ -5,7 +5,7 @@ import {
   Paper,
   TextField,
   Button,
- Alert,
+  Alert,
   CircularProgress,
   Divider,
   Card,
@@ -19,6 +19,12 @@ import {
   ListItemButton,
   ListItemText,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tab,
+  Tabs,
 } from '@mui/material'
 import {
   Delete as DeleteIcon,
@@ -27,11 +33,14 @@ import {
   Description as DescriptionIcon,
   History as HistoryIcon,
   Refresh as RefreshIcon,
+  Edit as EditIcon,
+  MenuBook as MenuBookIcon,
 } from '@mui/icons-material'
 
 interface VolumeChapter {
   title: string
   synopsis: string
+  body?: string
 }
 
 interface Volume {
@@ -92,6 +101,16 @@ export default function NovelWorkbench() {
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
   // Displayed volumes for the current version (parsed from version detail API)
   const [displayedVolumes, setDisplayedVolumes] = useState<Volume[]>([])
+
+  // Chapter detail modal state
+  const [chapterModalOpen, setChapterModalOpen] = useState(false)
+  const [selectedChapter, setSelectedChapter] = useState<{
+    chapter: VolumeChapter
+    volumeIdx: number
+    chapterIdx: number
+  } | null>(null)
+  const [chapterBody, setChapterBody] = useState('')
+  const [chapterTab, setChapterTab] = useState(0) // 0 = synopsis, 1 = body
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
 
@@ -386,9 +405,28 @@ export default function NovelWorkbench() {
                         </Typography>
                         {parseChapters(vol.chapters).map((ch, chIdx) => (
                           <Box key={chIdx} sx={{ mb: 0.5, pl: 2 }}>
-                            <Typography variant="body2" sx={{ color: '#4fc08d' }}>
-                              第{chIdx + 1}章：{ch.title}
-                            </Typography>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                                cursor: 'pointer',
+                                '&:hover': { color: '#81c784' },
+                              }}
+                              onClick={() => {
+                                setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
+                                setChapterBody(ch.body || '')
+                                setChapterTab(0)
+                                setChapterModalOpen(true)
+                              }}
+                            >
+                              <Typography variant="body2" sx={{ color: '#4fc08d' }}>
+                                第{chIdx + 1}章：{ch.title}
+                              </Typography>
+                              <Tooltip title="查看/编辑章节">
+                                <EditIcon sx={{ fontSize: 14, color: '#666' }} />
+                              </Tooltip>
+                            </Box>
                             <Typography variant="caption" color="text.secondary">
                               {ch.synopsis}
                             </Typography>
@@ -519,6 +557,62 @@ export default function NovelWorkbench() {
           {success}
         </Alert>
       )}
+
+      {/* Chapter Detail Modal */}
+      <Dialog
+        open={chapterModalOpen}
+        onClose={() => setChapterModalOpen(false)}
+        maxWidth="md"
+        fullWidth
+        sx={{ '& .MuiDialog-paper': { bgcolor: '#1a1a2e' } }}
+      >
+        {selectedChapter && (
+          <>
+            <DialogTitle sx={{ borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <MenuBookIcon sx={{ color: '#4fc08d' }} />
+              第{selectedChapter.chapterIdx + 1}章：{selectedChapter.chapter.title}
+            </DialogTitle>
+
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs value={chapterTab} onChange={(_, v) => setChapterTab(v)} sx={{ bgcolor: '#1a1a2e' }}>
+                <Tab label="📋 章节概要" icon={<DescriptionIcon />} iconPosition="start" sx={{ color: '#aaa' }} />
+                <Tab label="✍️ 章节正文" icon={<EditIcon />} iconPosition="start" sx={{ color: '#aaa' }} />
+              </Tabs>
+            </Box>
+
+            <DialogContent dividers>
+              {chapterTab === 0 && (
+                <Box sx={{ p: 1 }}>
+                  <Typography variant="body1" sx={{ color: '#e0e0e0', lineHeight: 1.8 }}>
+                    {selectedChapter.chapter.synopsis || '暂无概要'}
+                  </Typography>
+                </Box>
+              )}
+              {chapterTab === 1 && (
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={20}
+                  placeholder="在此撰写章节正文内容..."
+                  value={chapterBody}
+                  onChange={(e) => setChapterBody(e.target.value)}
+                  variant="outlined"
+                  sx={{
+                    '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                    '& .MuiOutlinedInput-input': { color: '#e0e0e0', fontFamily: 'Georgia, serif' },
+                  }}
+                />
+              )}
+            </DialogContent>
+
+            <DialogActions sx={{ px: 2, py: 1, borderTop: '1px solid #333' }}>
+              <Button onClick={() => setChapterModalOpen(false)} color="inherit">
+                关闭
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   )
 }
