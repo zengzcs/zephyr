@@ -305,7 +305,9 @@ export default function NovelWorkbench() {
       }
 
       const result = await res.json()
-      setChapterBody(result.body || '')
+      // result.body 可能是字符串（直接正文）或包含 content 字段（OpenAI 格式）
+      const chapterText = typeof result.body === 'string' ? result.body : (result.body?.content || '')
+      setChapterBody(chapterText)
       setSuccess(`✅ 章节正文生成成功`)
       setChapterAiPrompt('')
     } catch (err: any) {
