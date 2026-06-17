@@ -18,7 +18,7 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5011',
+    origin: process.env.FRONTEND_URL || 'http://192.168.1.200:5011',
     credentials: true,
   });
 
@@ -36,9 +36,10 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 5010;
-  await app.listen(port);
-  console.log(`🚀 Server running on http://localhost:${port}`);
-  console.log(`📖 API Docs: http://localhost:${port}/api/docs`);
+  const host = '0.0.0.0';
+  await app.listen(port, host);
+  console.log(`🚀 Server running on http://0.0.0.0:${port}`);
+  console.log(`📖 API Docs: http://0.0.0.0:${port}/api/docs`);
 }
 
 bootstrap();
