@@ -109,8 +109,10 @@ export default function NovelWorkbench() {
     volumeIdx: number
     chapterIdx: number
   } | null>(null)
-  const [chapterBody, setChapterBody] = useState('')
+ const [chapterBody, setChapterBody] = useState('')
   const [chapterTab, setChapterTab] = useState(0) // 0 = synopsis, 1 = body
+  const [chapterAiPrompt, setChapterAiPrompt] = useState('')
+  const [chapterGenerating, setChapterGenerating] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
 
@@ -265,6 +267,54 @@ export default function NovelWorkbench() {
     }
   }
 
+  // AI generate chapter body
+  const handleGenerateChapterBody = async () => {
+    if (!chapterAiPrompt.trim() || !selectedBook || !selectedChapter) return
+    if (!confirm(`将使用 AI 生成章节正文，当前内容将被覆盖。确定？`)) return
+
+    setChapterGenerating(true)
+    setError(null)
+
+    try {
+      // Build context: book synopsis + current volume context + chapter synopsis
+      const volIdx = selectedChapter.volumeIdx
+      const currentVolume = displayedVolumes[volIdx]
+      const prevVolumes = displayedVolumes.slice(0, volIdx).map(v => v.synopsis).join('\n')
+      const context = `书名：${selectedBook.title}
+故事概要：${selectedBook.synopsis}
+前一卷内容概要：${prevVolumes || '无'}
+当前卷概要：${currentVolume?.synopsis || '无'}
+第${selectedChapter.chapterIdx + 1}章概要：${selectedChapter.chapter.synopsis}`
+
+      const res = await fetch(`${API}/ai/generate-chapter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: selectedBook.id,
+          chapterIndex: selectedChapter.chapterIdx + 1,
+          chapterTitle: selectedChapter.chapter.title,
+          chapterSynopsis: selectedChapter.chapter.synopsis,
+          context,
+          prompt: chapterAiPrompt.trim(),
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.message || `HTTP ${res.status}`)
+      }
+
+      const result = await res.json()
+      setChapterBody(result.body || '')
+      setSuccess(`✅ 章节正文生成成功`)
+      setChapterAiPrompt('')
+    } catch (err: any) {
+      setError(err.message || 'AI 生成章节失败')
+    } finally {
+      setChapterGenerating(false)
+    }
+  }
+
   // Delete book
   const handleDelete = async (id: number) => {
     if (!confirm('确定删除此书及其所有版本？')) return
@@ -416,6 +466,7 @@ export default function NovelWorkbench() {
                               onClick={() => {
                                 setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
                                 setChapterBody(ch.body || '')
+                                setChapterAiPrompt(ch.synopsis)
                                 setChapterTab(0)
                                 setChapterModalOpen(true)
                               }}
@@ -589,19 +640,55 @@ export default function NovelWorkbench() {
                 </Box>
               )}
               {chapterTab === 1 && (
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={20}
-                  placeholder="在此撰写章节正文内容..."
-                  value={chapterBody}
-                  onChange={(e) => setChapterBody(e.target.value)}
-                  variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
-                    '& .MuiOutlinedInput-input': { color: '#e0e0e0', fontFamily: 'Georgia, serif' },
-                  }}
-                />
+                <Box>
+                  {/* AI Generation Section */}
+                  <Box sx={{ mb: 2, p: 2, bgcolor: '#1a1a2e', borderRadius: 1, border: '1px solid #333' }}>
+                    <Typography variant="subtitle2" sx={{ color: '#e040fb', mb: 1 }}>
+                      <AutoFixHighIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      AI 生成章节正文
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      placeholder="输入生成要求，例如：加入环境描写、增加对话、突出主角的内心挣扎..."
+                      value={chapterAiPrompt}
+                      onChange={(e) => setChapterAiPrompt(e.target.value)}
+                      variant="outlined"
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleGenerateChapterBody}
+                      disabled={chapterGenerating || !chapterAiPrompt.trim() || !selectedBook}
+                      startIcon={chapterGenerating ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+                      size="small"
+                      sx={{ bgcolor: '#e040fb', '&:hover': { bgcolor: '#c2185b' } }}
+                    >
+                      {chapterGenerating ? 'AI 生成中...' : '✨ AI 生成正文'}
+                    </Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                      默认使用章节概要作为生成基础，输入要求可进一步细化
+                    </Typography>
+                  </Box>
+
+                  {/* Chapter Body */}
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={20}
+                    placeholder="在此撰写章节正文内容..."
+                    value={chapterBody}
+                    onChange={(e) => setChapterBody(e.target.value)}
+                    variant="outlined"
+                    sx={{
+                      '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                      '& .MuiOutlinedInput-input': { color: '#e0e0e0', fontFamily: 'Georgia, serif' },
+                    }}
+                  />
+                </Box>
               )}
             </DialogContent>
 

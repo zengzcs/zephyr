@@ -12,6 +12,15 @@ const RefineOutlineDto = z.object({
   prompt: z.string().min(1).max(2000),
 });
 
+const GenerateChapterDto = z.object({
+  bookId: z.number(),
+  chapterIndex: z.number(),
+  chapterTitle: z.string(),
+  chapterSynopsis: z.string(),
+  context: z.string(),
+  prompt: z.string().min(1).max(5000),
+});
+
 interface VolumeChapter {
   title: string;
   synopsis: string;
@@ -182,6 +191,40 @@ export class AiController {
       success: true,
       versionId: versionResult.lastInsertRowid,
       outline: refined,
+    };
+  }
+
+  @Post('generate-chapter')
+  @HttpCode(HttpStatus.OK)
+  async generateChapter(@Body() body: { bookId: number; chapterIndex: number; chapterTitle: string; chapterSynopsis: string; context: string; prompt: string }) {
+    const { bookId, chapterIndex, chapterTitle, chapterSynopsis, context, prompt } = GenerateChapterDto.parse(body);
+
+    const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
+    if (!book) throw new Error('Book not found');
+
+    const systemPrompt = `你是一位专业的网络小说作家。根据以下上下文信息，为指定章节生成详细的正文内容。
+
+${context}
+
+用户要求：${prompt}
+
+请直接输出章节正文，不要包含章节标题。正文风格应与故事整体风格一致，字数在800-2000字之间。使用中文写作。`;
+
+    const bodyContent = await this.aiService.chatCompletion({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `请为第${chapterIndex}章"${chapterTitle}"生成正文。` },
+      ],
+      temperature: 0.8,
+      maxTokens: 4096,
+    });
+
+    return {
+      success: true,
+      bookId,
+      chapterIndex,
+      chapterTitle,
+      body: bodyContent,
     };
   }
 
