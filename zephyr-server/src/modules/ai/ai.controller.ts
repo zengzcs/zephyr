@@ -70,11 +70,26 @@ export class AiController {
     let outline: GeneratedOutline;
     try {
       let jsonStr = rawContent.trim();
+      // Strip BOM if present
+      jsonStr = jsonStr.replace(/^\uFEFF/, '');
+      // Extract from markdown code block if present
       const markdownMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (markdownMatch) {
         jsonStr = markdownMatch[1].trim();
       }
-      outline = JSON.parse(jsonStr);
+      // Try direct parse first
+      try {
+        outline = JSON.parse(jsonStr);
+      } catch {
+        // Try to fix common issues: remove trailing commas, comments
+        let cleaned = jsonStr
+          .replace(/,\s*}/g, '}')  // trailing comma before }
+          .replace(/,\s*\]/g, ']')  // trailing comma before ]
+          .replace(/\/\/.*$/gm, '')  // line comments
+          .replace(/\/\*[\s\S]*?\*\//g, '');  // block comments
+        cleaned = cleaned.trim();
+        outline = JSON.parse(cleaned);
+      }
     } catch (err) {
       throw new Error(`AI 返回格式错误，无法解析为 JSON: ${rawContent.substring(0, 200)}...`);
     }
@@ -154,11 +169,22 @@ export class AiController {
     let refined: GeneratedOutline;
     try {
       let jsonStr = rawContent.trim();
+      jsonStr = jsonStr.replace(/^\uFEFF/, '');
       const markdownMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (markdownMatch) {
         jsonStr = markdownMatch[1].trim();
       }
-      refined = JSON.parse(jsonStr);
+      try {
+        refined = JSON.parse(jsonStr);
+      } catch {
+        let cleaned = jsonStr
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*\]/g, ']')
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '');
+        cleaned = cleaned.trim();
+        refined = JSON.parse(cleaned);
+      }
     } catch (err) {
       throw new Error(`AI 返回格式错误，无法解析为 JSON: ${rawContent.substring(0, 200)}...`);
     }
