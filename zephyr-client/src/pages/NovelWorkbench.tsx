@@ -117,7 +117,7 @@ export default function NovelWorkbench() {
   const [refining, setRefining] = useState(false)
   const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
-  const API = 'http://localhost:5010'
+  const API = 'http://192.168.1.100:5010'
 
   // Fetch book list
   const fetchBooks = async () => {
