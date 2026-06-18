@@ -902,15 +902,18 @@ export default function NovelWorkbench() {
                               </Typography>
                             }
                             secondary={
-                              <>
-                                <Typography variant="caption" sx={{ display: 'block', color: '#888', fontSize: '0.6rem' }}>
-                                  {ver.refine_prompt?.substring(0, 30)}...
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.55rem' }}>
-                                  {ver.created_at}
-                                </Typography>
-                              </>
-                            }
+                               <>
+                                 <Typography variant="caption" sx={{ display: 'block', color: '#888', fontSize: '0.6rem' }}>
+                                   第{selectedChapter?.chapterIdx + 1}章：{selectedChapter?.chapter?.title}
+                                 </Typography>
+                                 <Typography variant="caption" sx={{ display: 'block', color: '#666', fontSize: '0.55rem' }}>
+                                   {ver.refine_prompt?.substring(0, 20)}...
+                                 </Typography>
+                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.5rem' }}>
+                                   {ver.created_at}
+                                 </Typography>
+                               </>
+                             }
                           />
                           <Box sx={{ display: 'flex', gap: 0.5 }}>
                             <Tooltip title="查看此版本">
