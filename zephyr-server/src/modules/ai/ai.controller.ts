@@ -377,6 +377,16 @@ ${context}
     return version;
   }
 
+  @Delete('books/:bookId/volumes/:volumeIndex/chapters/:chapterIndex/versions/:versionId')
+  @HttpCode(HttpStatus.OK)
+  async deleteChapterVersion(@Param('bookId') bookId: string, @Param('volumeIndex') volumeIndex: string, @Param('chapterIndex') chapterIndex: string, @Param('versionId') versionId: string) {
+    const result = this.rawDb.prepare(
+      'DELETE FROM chapter_body_versions WHERE id = ? AND book_id = ? AND volume_index = ? AND chapter_index = ?',
+    ).run(versionId, bookId, volumeIndex, chapterIndex);
+    if (result.changes === 0) throw new Error('Version not found');
+    return { success: true };
+  }
+
   @Get('books')
   async getBooks() {
     const books = this.rawDb.prepare('SELECT * FROM books ORDER BY created_at DESC').all();
