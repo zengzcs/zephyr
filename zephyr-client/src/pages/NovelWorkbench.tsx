@@ -384,17 +384,18 @@ export default function NovelWorkbench() {
   }, [selectedBook, selectedChapter, API])
 
   // Open chapter modal - also load version history
-  const openChapterModal = (volIdx: number, chIdx: number, ch: VolumeChapter) => {
+  const openChapterModal = async (volIdx: number, chIdx: number, ch: VolumeChapter) => {
     setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
     setChapterBody(ch.body || '')
     setChapterAiPrompt(ch.synopsis)
     setChapterTab(0)
-    setChapterVersions([])
     setChapterVersionExpanded(false)
     setChapterRefinePrompt('')
     setChapterRefining(false)
     setChapterSaving(false)
     setChapterModalOpen(true)
+    // Load chapter version history
+    await loadChapterVersions()
   }
 
   // Save chapter body version (manual save)
