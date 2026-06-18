@@ -207,6 +207,9 @@ export default function NovelWorkbench() {
               const verDetail = await verDetailRes.json()
               setDisplayedVolumes(verDetail.volumes || [])
             }
+          } else {
+            // No version history — use the book's volumes directly (legacy books without version feature)
+            setDisplayedVolumes(data.volumes || [])
           }
         }
       }
