@@ -371,7 +371,7 @@ export default function NovelWorkbench() {
 
   // Load chapter body version history
   const loadChapterVersions = useCallback(async () => {
-    if (!selectedBook || !selectedChapter) return
+    if (!selectedBook || !selectedChapter) return null
     setChapterVersions([]) // Reset immediately to prevent stale data
     try {
       const res = await fetch(
@@ -380,10 +380,12 @@ export default function NovelWorkbench() {
       if (res.ok) {
         const data = await res.json()
         setChapterVersions(data)
+        return data
       }
     } catch {
       // Non-critical
     }
+    return null
   }, [selectedBook, selectedChapter, API])
 
   // Open chapter modal - also load version history
@@ -397,8 +399,11 @@ export default function NovelWorkbench() {
     setChapterSaving(false)
     setChapterSelectedVersionId(null)
     setChapterModalOpen(true)
-    // Load chapter version history
-    await loadChapterVersions()
+    // Load chapter version history and auto-fill reading mode with the latest version
+    const versions = await loadChapterVersions()
+    if (versions && versions.length > 0) {
+      setChapterBody(versions[0].body || '')
+    }
   }
 
   // Save chapter body version (manual save)
@@ -503,17 +508,15 @@ export default function NovelWorkbench() {
       )
       if (res.ok) {
         setSuccess('✅ 版本已删除')
-        // If deleted version is currently selected, restore to current body
+        // Reload and get the updated versions
+        const updatedVersions = await loadChapterVersions()
+        // If deleted version is currently selected, restore to first available version
         if (chapterSelectedVersionId === versionId) {
           setChapterSelectedVersionId(null)
-          // Reload current body from backend
-          await loadChapterVersions()
-          // Use first available version or current body
-          if (chapterVersions.length > 0) {
-            setChapterBody(chapterVersions[0].body)
+          if (updatedVersions && updatedVersions.length > 0) {
+            setChapterBody(updatedVersions[0].body)
           }
         }
-        await loadChapterVersions()
       }
     } catch {
       setError('删除版本失败')
