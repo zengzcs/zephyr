@@ -8,6 +8,41 @@
       "when": 1781619265127,
       "tag": "0000_large_thundra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1781619265128,
+      "tag": "0001_ai_novel_workbench",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781619265129,
+      "tag": "0002_ai_novel_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1781619265130,
+      "tag": "0003_add_chapter_body",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781619265131,
+      "tag": "0004_chapter_body_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1781619265132,
+      "tag": "0005_chapter_version_redesign",
+      "breakpoints": true
     }
   ]
 }
