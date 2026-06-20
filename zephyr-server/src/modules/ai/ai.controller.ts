@@ -821,12 +821,12 @@ ${context}
 
     if (!latestOv) return [];
 
-    // Get all chapters in the latest outline version, along with their latest body
+    // Get chapters that have at least one body version, along with their latest body
     const chapters = this.rawDb.prepare(`
       SELECT ch.id as chapter_id, ch.volume_index, ch.chapter_index, ch.title, ch.synopsis,
              cb.body, cb.refine_prompt, cb.created_at
       FROM chapters ch
-      LEFT JOIN (
+      INNER JOIN (
         SELECT chapter_id, body, refine_prompt, created_at FROM chapter_bodies cb1
         WHERE created_at = (
           SELECT MAX(created_at) FROM chapter_bodies cb2 WHERE cb2.chapter_id = cb1.chapter_id
