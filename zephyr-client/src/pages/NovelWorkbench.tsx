@@ -120,7 +120,17 @@ export default function NovelWorkbench() {
   const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   // Book-level chapter body versions (all chapters) + main version
-  const [bookBodyVersions, setBookBodyVersions] = useState<any[]>([])
+  // Each entry represents a chapter's latest body text
+  const [bookBodyVersions, setBookBodyVersions] = useState<Array<{
+    id: number
+    chapter_id: number
+    book_id: number
+    volume_index: number
+    chapter_index: number
+    body: string
+    refine_prompt: string
+    created_at: string
+  }>>([])
   const [mainVersionId, setMainVersionId] = useState<number | null>(null)
   // Current chapter's versions (filtered from bookBodyVersions)
   const [currentChapterVersions, setCurrentChapterVersions] = useState<any[]>([])
@@ -218,6 +228,9 @@ export default function NovelWorkbench() {
         }
 
         // Load all book-level chapter body versions (for sidebar)
+        // Reset chapter version state since we're loading a new book
+        setCurrentChapterVersions([])
+        setChapterSelectedVersionId(null)
         await loadBookBodyVersions()
       }
     } catch {
@@ -252,7 +265,7 @@ export default function NovelWorkbench() {
       }
 
       const result = await res.json()
-      setSuccess(`✅ 版本 ${result.versionId} 生成成功`)
+      setSuccess(`✅ 版本 ${result.outlineVersionId || result.versionId} 生成成功`)
       setRefinePrompt('')
 
       // Reload versions and load the latest version's volumes
@@ -394,6 +407,7 @@ export default function NovelWorkbench() {
   }
 
   // Save chapter body to backend
+  // In the new design, saveChapter already creates chapter_bodies entries
   const saveChapterBody = useCallback(async (body: string) => {
     if (!selectedBook || !selectedChapter) return
     try {
@@ -407,7 +421,7 @@ export default function NovelWorkbench() {
           body,
         }),
       })
-      // Also sync body to version snapshot so ch.body is populated on next open
+      // Also sync body to version snapshot
       await fetch(`${API}/ai/chapters/sync-version`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -441,6 +455,7 @@ export default function NovelWorkbench() {
   }, [selectedBook, selectedChapter, API])
 
   // Load all book-level chapter body versions (for sidebar display)
+  // Each entry is the latest body for one chapter
   const loadBookBodyVersions = useCallback(async () => {
     if (!selectedBook) return
     try {
@@ -448,18 +463,23 @@ export default function NovelWorkbench() {
       if (res.ok) {
         const data = await res.json()
         setBookBodyVersions(data)
-        // Also load main version
+        // Also load main version (first chapter's latest body)
         const mainRes = await fetch(`${API}/ai/books/${selectedBook.id}/main-version`)
         if (mainRes.ok) {
           const main = await mainRes.json()
           setMainVersionId(main?.id || null)
         }
-        // Filter current chapter's versions
+        // Filter current chapter's versions from the chapter body versions API
         if (selectedChapter) {
-          const filtered = data.filter(
-            (v: any) => v.volume_index === selectedChapter.volumeIdx && v.chapter_index === selectedChapter.chapterIdx,
+          // For the current chapter, we need to get ALL body versions, not just the latest
+          // Use the per-chapter versions endpoint
+          const chVerRes = await fetch(
+            `${API}/ai/books/${selectedBook.id}/volumes/${selectedChapter.volumeIdx}/chapters/${selectedChapter.chapterIdx}/versions`,
           )
-          setCurrentChapterVersions(filtered)
+          if (chVerRes.ok) {
+            const chVerData = await chVerRes.json()
+            setCurrentChapterVersions(chVerData)
+          }
         }
       }
     } catch {
@@ -500,10 +520,10 @@ export default function NovelWorkbench() {
     // Load chapter version history and auto-fill reading mode with the latest version
     const versions = await loadChapterVersions()
     if (versions && versions.length > 0) {
+      // Use the latest version's body
       setChapterBody(versions[0].body || '')
     } else if (!ch.body) {
-      // Fallback: if no version records and ch.body is empty, check current chapters JSON
-      // (saveChapterBody updates current volumes but not the version snapshot)
+      // Fallback: check current chapters JSON from volumes
       try {
         const res = await fetch(`${API}/ai/books/${selectedBook?.id}/chapters/${volIdx}`)
         if (res.ok) {
@@ -609,18 +629,21 @@ export default function NovelWorkbench() {
   }
 
   // Restore a chapter body version (instant, no confirm)
+  // In the new design, this makes the selected version the "current" (latest) body for the chapter
   const restoreChapterVersion = async (version: any) => {
     setChapterSelectedVersionId(version.id)
     setChapterBody(version.body)
-    await loadChapterVersions()
-    // Also update displayed volumes to this version's data
+    // Make this version the latest for this chapter by calling set-main-version
     if (selectedBook) {
       try {
-        const res = await fetch(`${API}/ai/books/${selectedBook.id}/versions/${version.id}`)
-        if (res.ok) {
-          const data = await res.json()
-          setDisplayedVolumes(data.volumes || [])
-        }
+        await fetch(`${API}/ai/books/${selectedBook.id}/set-main-version`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ versionId: version.id }),
+        }).catch(() => {})
+        // Reload to reflect changes
+        await loadChapterVersions()
+        await loadBookBodyVersions()
       } catch {
         // Non-critical
       }
@@ -1007,7 +1030,7 @@ export default function NovelWorkbench() {
                 </Box>
 
 <Box sx={{ flex: 1, overflow: 'auto' }}>
-                  {/* Main version section (always visible if set) */}
+                  {/* Main version section (first chapter's latest body) */}
                   {mainVersionId && bookBodyVersions.length > 0 && (
                     <Box sx={{ px: 1, py: 0.5, borderBottom: '1px solid #333', bgcolor: '#1a1500' }}>
                       <Typography variant="caption" sx={{ color: '#ff9800', display: 'block', mb: 0.5 }}>
