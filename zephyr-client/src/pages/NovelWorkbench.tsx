@@ -507,7 +507,6 @@ export default function NovelWorkbench() {
 
   // Open chapter modal - also load version history
   const openChapterModal = async (volIdx: number, chIdx: number, ch: VolumeChapter) => {
-    console.log('[DEBUG] openChapterModal:', { volIdx, chIdx, chTitle: ch?.title, chBody: ch?.body, chKeys: Object.keys(ch || {}) })
     setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
     setChapterBody(ch.body || '')
     setChapterAiPrompt(ch.synopsis)
@@ -523,8 +522,9 @@ export default function NovelWorkbench() {
     if (versions && versions.length > 0) {
       // Use the latest version's body
       setChapterBody(versions[0].body || '')
-    } else if (!ch.body) {
+    } else if (!('body' in ch)) {
       // Fallback: check current chapters JSON from volumes
+      // Only use fallback if the body field is completely missing (not just empty)
       try {
         const res = await fetch(`${API}/ai/books/${selectedBook?.id}/chapters/${volIdx}`)
         if (res.ok) {
