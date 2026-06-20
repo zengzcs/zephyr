@@ -299,13 +299,14 @@ export default function NovelWorkbench() {
     setError(null)
 
     try {
-      // Build context: book synopsis + current volume context + chapter synopsis + main version body
+      // Build context: book synopsis + volume context + chapter synopsis + main version + recent chapters
       const volIdx = selectedChapter.volumeIdx
       const currentVolume = displayedVolumes[volIdx]
       const prevVolumes = displayedVolumes.slice(0, volIdx).map(v => v.synopsis).join('\n')
 
-      // Load main version body for context reference
+      // Load main version body for context reference (full body, not truncated)
       let mainVersionContext = ''
+      let recentChaptersContext = ''
       if (mainVersionId) {
         try {
           const mainVerRes = await fetch(`${API}/ai/books/${selectedBook.id}/all-chapter-versions`)
@@ -313,7 +314,7 @@ export default function NovelWorkbench() {
             const allVers = await mainVerRes.json()
             const mainVer = allVers.find((v: any) => v.id === mainVersionId)
             if (mainVer?.body) {
-              mainVersionContext = `\n主版本参考（第${mainVer.chapter_index + 1}章）：${mainVer.body.substring(0, 1500)}...`
+              mainVersionContext = `\n\n=== 主版本参考（第${mainVer.chapter_index + 1}章） ===\n${mainVer.body}`
             }
           }
         } catch {
@@ -321,11 +322,28 @@ export default function NovelWorkbench() {
         }
       }
 
+      // Load recent chapters from displayed volumes for continuity
+      const recentChapters: string[] = []
+      for (let vIdx = 0; vIdx < displayedVolumes.length; vIdx++) {
+        const vol = displayedVolumes[vIdx]
+        if (!vol?.chapters) continue
+        const chapters = typeof vol.chapters === 'string' ? JSON.parse(vol.chapters) : (vol.chapters || [])
+        for (let cIdx = 0; cIdx < chapters.length; cIdx++) {
+          const ch = chapters[cIdx]
+          if (ch?.body && ch.body.trim()) {
+            recentChapters.push(`第${cIdx + 1}章「${ch.title}」概要：${ch.synopsis}\n正文（前500字）：${ch.body.substring(0, 500)}...`)
+          }
+        }
+      }
+      if (recentChapters.length > 0) {
+        recentChaptersContext = `\n\n=== 前文章节参考（剧情连续性） ===\n${recentChapters.slice(-5).join('\n\n---\n')}`
+      }
+
       const context = `书名：${selectedBook.title}
 故事概要：${selectedBook.synopsis}
 前一卷内容概要：${prevVolumes || '无'}
 当前卷概要：${currentVolume?.synopsis || '无'}
-第${selectedChapter.chapterIdx + 1}章概要：${selectedChapter.chapter.synopsis}${mainVersionContext}`
+第${selectedChapter.chapterIdx + 1}章概要：${selectedChapter.chapter.synopsis}${mainVersionContext}${recentChaptersContext}`
 
       const res = await fetch(`${API}/ai/generate-chapter`, {
         method: 'POST',

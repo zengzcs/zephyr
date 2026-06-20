@@ -312,11 +312,42 @@ ${context}
 
     const chapter = chapters[chapterIndex];
 
+    // Load main version for context reference
+    let mainVersionContext = '';
+    try {
+      const mainVer = this.rawDb.prepare(
+        'SELECT id, chapter_index, body FROM chapter_body_versions WHERE book_id = ? AND is_main = 1 LIMIT 1',
+      ).get(bookId);
+      if (mainVer && mainVer.body) {
+        mainVersionContext = `\n\n=== 主版本参考（第${mainVer.chapter_index + 1}章） ===\n${mainVer.body}`;
+      }
+    } catch {
+      // Non-critical
+    }
+
+    // Load recent chapters for continuity (up to 5 chapters with body)
+    let recentChaptersContext = '';
+    const allVols = this.rawDb.prepare('SELECT * FROM volumes WHERE book_id = ? ORDER BY "order"').all(bookId);
+    const recentChapters: string[] = [];
+    for (const vol of allVols) {
+      if (!vol?.chapters) continue;
+      const volChapters = typeof vol.chapters === 'string' ? JSON.parse(vol.chapters) : (vol.chapters || []);
+      for (const ch of volChapters) {
+        if (ch?.body && ch.body.trim()) {
+          recentChapters.push(`第${volChapters.indexOf(ch) + 1}章「${ch.title}」概要：${ch.synopsis || ''}\n正文（前500字）：${ch.body.substring(0, 500)}...`);
+        }
+      }
+    }
+    if (recentChapters.length > 0) {
+      recentChaptersContext = `\n\n=== 前文章节参考（剧情连续性） ===\n${recentChapters.slice(-5).join('\n\n---\n')}`;
+    }
+
     const context = `书名：${book.title}\n故事概要：${book.synopsis}\n\n`
       + `当前卷：${volume.title}（${volume.synopsis}）\n`
       + `当前章节：第${chapterIndex + 1}章「${chapter.title}」\n`
       + `章节概要：${chapter.synopsis}\n\n`
-      + `当前正文：\n${chapter.body || '（暂无正文）'}`;
+      + `当前正文：\n${chapter.body || '（暂无正文）'}\n`
+      + `${mainVersionContext}${recentChaptersContext}`;
 
     const systemPrompt = `你是一位专业的网络小说作家。根据以下上下文和用户要求，对指定章节正文进行调整。
 
