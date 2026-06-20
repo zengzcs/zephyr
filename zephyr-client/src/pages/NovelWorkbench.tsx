@@ -122,6 +122,8 @@ export default function NovelWorkbench() {
   // Book-level chapter body versions (all chapters) + main version
   const [bookBodyVersions, setBookBodyVersions] = useState<any[]>([])
   const [mainVersionId, setMainVersionId] = useState<number | null>(null)
+  // Current chapter's versions (filtered from bookBodyVersions)
+  const [currentChapterVersions, setCurrentChapterVersions] = useState<any[]>([])
 
   const [chapterRefinePrompt, setChapterRefinePrompt] = useState('')
   const [chapterRefining, setChapterRefining] = useState(false)
@@ -452,11 +454,18 @@ export default function NovelWorkbench() {
           const main = await mainRes.json()
           setMainVersionId(main?.id || null)
         }
+        // Filter current chapter's versions
+        if (selectedChapter) {
+          const filtered = data.filter(
+            (v: any) => v.volume_index === selectedChapter.volumeIdx && v.chapter_index === selectedChapter.chapterIdx,
+          )
+          setCurrentChapterVersions(filtered)
+        }
       }
     } catch {
       // Non-critical
     }
-  }, [selectedBook, API])
+  }, [selectedBook, selectedChapter, API])
 
   // Set a chapter body version as the main version for this book
   const setMainVersion = useCallback(async (versionId: number) => {
@@ -998,7 +1007,51 @@ export default function NovelWorkbench() {
                 </Box>
 
 <Box sx={{ flex: 1, overflow: 'auto' }}>
-                  {bookBodyVersions.length === 0 ? (
+                  {/* Main version section (always visible if set) */}
+                  {mainVersionId && bookBodyVersions.length > 0 && (
+                    <Box sx={{ px: 1, py: 0.5, borderBottom: '1px solid #333', bgcolor: '#1a1500' }}>
+                      <Typography variant="caption" sx={{ color: '#ff9800', display: 'block', mb: 0.5 }}>
+                        ⭐ 主版本参考
+                      </Typography>
+                      {bookBodyVersions
+                        .filter((v: any) => v.id === mainVersionId)
+                        .map((mainVer: any) => (
+                          <ListItemButton
+                            key={mainVer.id}
+                            component="li"
+                            onClick={() => restoreChapterVersion(mainVer)}
+                            sx={{
+                              mb: 0.5,
+                              px: 1,
+                              borderLeft: '3px solid #ff9800',
+                              borderRadius: 1,
+                              bgcolor: '#2e1a00',
+                            }}
+                          >
+                            <ListItemText
+                              primary={
+                                <Typography variant="body2" sx={{ color: '#ff9800', fontSize: '0.7rem' }}>
+                                  ⭐ v{mainVer.id}
+                                </Typography>
+                              }
+                              secondary={
+                                <>
+                                  <Typography variant="caption" sx={{ display: 'block', color: '#888', fontSize: '0.55rem' }}>
+                                    第{mainVer.chapter_index + 1}章（卷{mainVer.volume_index + 1}）
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.45rem' }}>
+                                    {mainVer.created_at}
+                                  </Typography>
+                                </>
+                              }
+                            />
+                          </ListItemButton>
+                        ))}
+                    </Box>
+                  )}
+
+                  {/* Current chapter's versions */}
+                  {currentChapterVersions.length === 0 && bookBodyVersions.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 3, px: 1 }}>
                       暂无正文版本记录
                       <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#666' }}>
@@ -1007,37 +1060,33 @@ export default function NovelWorkbench() {
                     </Typography>
                   ) : (
                     <List dense>
-                      {bookBodyVersions.map((ver) => (
+                      {currentChapterVersions.map((ver) => (
                         <ListItemButton
                           key={ver.id}
                           component="li"
-                          selected={mainVersionId === ver.id}
+                          selected={chapterSelectedVersionId === ver.id}
                           onClick={() => restoreChapterVersion(ver)}
                           sx={{
                             mb: 0.5,
                             px: 1,
                             borderLeft: '3px solid transparent',
                             borderRadius: 1,
-                            bgcolor: mainVersionId === ver.id ? '#2e1a00' : 'transparent',
-                            '&.Mui-selected': { borderLeftColor: '#ff9800', bgcolor: '#2e1a00' },
-                            '&:hover': { borderLeftColor: '#ff9800' },
+                            '&.Mui-selected': { borderLeftColor: '#4fc08d', bgcolor: '#1a2e1a' },
+                            '&:hover': { borderLeftColor: '#4fc08d' },
                           }}
                         >
                           <ListItemText
                             primary={
-                              <Typography variant="body2" sx={{ color: mainVersionId === ver.id ? '#ff9800' : '#aaa', fontSize: '0.75rem' }}>
-                                v{ver.id} {mainVersionId === ver.id && '⭐ 主版本'}
+                              <Typography variant="body2" sx={{ color: chapterSelectedVersionId === ver.id ? '#4fc08d' : '#aaa', fontSize: '0.75rem' }}>
+                                v{ver.id}
                               </Typography>
                             }
                             secondary={
                                <>
-                                  <Typography variant="caption" sx={{ display: 'block', color: '#888', fontSize: '0.6rem' }}>
-                                    第{ver.chapter_index + 1}章（卷{ver.volume_index + 1}）
-                                  </Typography>
                                   <Typography variant="caption" sx={{ display: 'block', color: '#666', fontSize: '0.55rem' }}>
                                     {ver.refine_prompt?.substring(0, 25)}...
                                   </Typography>
-                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.5rem' }}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.45rem' }}>
                                     {ver.created_at}
                                   </Typography>
                                 </>
@@ -1059,11 +1108,6 @@ export default function NovelWorkbench() {
                                   <StarIcon fontSize="small" />
                                 </IconButton>
                               </span>
-                            </Tooltip>
-                            <Tooltip title="查看此版本">
-                              <IconButton size="small" sx={{ color: '#4fc08d' }} onClick={(e) => { e.stopPropagation(); }}>
-                                <VisibilityIcon fontSize="small" />
-                              </IconButton>
                             </Tooltip>
                             <Tooltip title="删除此版本">
                               <IconButton
