@@ -364,6 +364,17 @@ export default function NovelWorkbench() {
           body,
         }),
       })
+      // Also sync body to version snapshot so ch.body is populated on next open
+      await fetch(`${API}/ai/chapters/sync-version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookId: selectedBook.id,
+          volumeIndex: selectedChapter.volumeIdx,
+          chapterIndex: selectedChapter.chapterIdx,
+          body,
+        }),
+      }).catch(() => {})
     } catch {
       // Save failure is non-critical
     }
@@ -399,10 +410,26 @@ export default function NovelWorkbench() {
     setChapterSaving(false)
     setChapterSelectedVersionId(null)
     setChapterModalOpen(true)
+
     // Load chapter version history and auto-fill reading mode with the latest version
     const versions = await loadChapterVersions()
     if (versions && versions.length > 0) {
       setChapterBody(versions[0].body || '')
+    } else if (!ch.body) {
+      // Fallback: if no version records and ch.body is empty, check current chapters JSON
+      // (saveChapterBody updates current volumes but not the version snapshot)
+      try {
+        const res = await fetch(`${API}/ai/books/${selectedBook?.id}/chapters/${volIdx}`)
+        if (res.ok) {
+          const currentChapters = await res.json()
+          const currentCh = currentChapters?.[chIdx]
+          if (currentCh?.body) {
+            setChapterBody(currentCh.body)
+          }
+        }
+      } catch {
+        // Non-critical
+      }
     }
   }
 

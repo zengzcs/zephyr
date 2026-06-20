@@ -393,6 +393,56 @@ ${context}
     return books;
   }
 
+  @Get('books/:id/chapters/:volumeIndex')
+  async getCurrentChapters(@Param('id') id: string, @Param('volumeIndex') volumeIndex: string) {
+    const vol = this.rawDb.prepare(
+      'SELECT chapters FROM volumes WHERE book_id = ? AND "order" = ?',
+    ).get(id, parseInt(volumeIndex) + 1);
+    if (!vol) return [];
+    try {
+      return typeof vol.chapters === 'string' ? JSON.parse(vol.chapters) : vol.chapters;
+    } catch {
+      return [];
+    }
+  }
+
+  @Post('chapters/sync-version')
+  @HttpCode(HttpStatus.OK)
+  async syncChapterToVersion(@Body() body: { bookId: number; volumeIndex: number; chapterIndex: number; body: string }) {
+    const { bookId, volumeIndex, chapterIndex, body: chapterBody } = body;
+
+    // Get the oldest version for this book
+    const version = this.rawDb.prepare(
+      'SELECT id, outline_json FROM versions WHERE book_id = ? ORDER BY created_at ASC LIMIT 1',
+    ).get(bookId);
+    if (!version) return { success: false };
+
+    let outlineData: any;
+    try {
+      outlineData = typeof version.outline_json === 'string'
+        ? JSON.parse(version.outline_json)
+        : version.outline_json;
+    } catch {
+      return { success: false };
+    }
+
+    if (!outlineData.volumes || !Array.isArray(outlineData.volumes)) return { success: false };
+
+    const vol = outlineData.volumes[volumeIndex];
+    if (!vol || !Array.isArray(vol.chapters)) return { success: false };
+
+    if (chapterIndex >= 0 && chapterIndex < vol.chapters.length) {
+      vol.chapters[chapterIndex].body = chapterBody;
+    }
+
+    this.rawDb.prepare('UPDATE versions SET outline_json = ? WHERE id = ?').run(
+      JSON.stringify(outlineData),
+      version.id,
+    );
+
+    return { success: true };
+  }
+
   @Get('books/:id')
   async getBook(@Param('id') id: string) {
     const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(id);
