@@ -507,6 +507,7 @@ export default function NovelWorkbench() {
 
   // Open chapter modal - also load version history
   const openChapterModal = async (volIdx: number, chIdx: number, ch: VolumeChapter) => {
+    console.log('[DEBUG] openChapterModal:', { volIdx, chIdx, chTitle: ch?.title, chBody: ch?.body, chKeys: Object.keys(ch || {}) })
     setSelectedChapter({ chapter: ch, volumeIdx: volIdx, chapterIdx: chIdx })
     setChapterBody(ch.body || '')
     setChapterAiPrompt(ch.synopsis)
