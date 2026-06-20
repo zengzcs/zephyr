@@ -26,17 +26,18 @@ import {
   Tabs,
  } from '@mui/material'
 import {
-  Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon,
-  AutoFixHigh as AutoFixHighIcon,
-  Description as DescriptionIcon,
-  History as HistoryIcon,
-  Refresh as RefreshIcon,
-  Edit as EditIcon,
-  MenuBook as MenuBookIcon,
-  Save as SaveIcon,
-  Visibility as VisibilityIcon,
-} from '@mui/icons-material'
+   Delete as DeleteIcon,
+   ExpandMore as ExpandMoreIcon,
+   AutoFixHigh as AutoFixHighIcon,
+   Description as DescriptionIcon,
+   History as HistoryIcon,
+   Refresh as RefreshIcon,
+   Edit as EditIcon,
+   MenuBook as MenuBookIcon,
+   Save as SaveIcon,
+   Visibility as VisibilityIcon,
+   Star as StarIcon,
+ } from '@mui/icons-material'
 
 interface VolumeChapter {
   title: string
@@ -118,9 +119,10 @@ export default function NovelWorkbench() {
   const [refining, setRefining] = useState(false)
   const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
-  // Chapter body version history state
-  const [chapterVersions, setChapterVersions] = useState<any[]>([])
- 
+  // Book-level chapter body versions (all chapters) + main version
+  const [bookBodyVersions, setBookBodyVersions] = useState<any[]>([])
+  const [mainVersionId, setMainVersionId] = useState<number | null>(null)
+
   const [chapterRefinePrompt, setChapterRefinePrompt] = useState('')
   const [chapterRefining, setChapterRefining] = useState(false)
   const [chapterSaving, setChapterSaving] = useState(false)
@@ -212,6 +214,9 @@ export default function NovelWorkbench() {
             setDisplayedVolumes(data.volumes || [])
           }
         }
+
+        // Load all book-level chapter body versions (for sidebar)
+        await loadBookBodyVersions()
       }
     } catch {
       setError('无法加载书籍详情')
@@ -294,15 +299,33 @@ export default function NovelWorkbench() {
     setError(null)
 
     try {
-      // Build context: book synopsis + current volume context + chapter synopsis
+      // Build context: book synopsis + current volume context + chapter synopsis + main version body
       const volIdx = selectedChapter.volumeIdx
       const currentVolume = displayedVolumes[volIdx]
       const prevVolumes = displayedVolumes.slice(0, volIdx).map(v => v.synopsis).join('\n')
+
+      // Load main version body for context reference
+      let mainVersionContext = ''
+      if (mainVersionId) {
+        try {
+          const mainVerRes = await fetch(`${API}/ai/books/${selectedBook.id}/all-chapter-versions`)
+          if (mainVerRes.ok) {
+            const allVers = await mainVerRes.json()
+            const mainVer = allVers.find((v: any) => v.id === mainVersionId)
+            if (mainVer?.body) {
+              mainVersionContext = `\n主版本参考（第${mainVer.chapter_index + 1}章）：${mainVer.body.substring(0, 1500)}...`
+            }
+          }
+        } catch {
+          // Non-critical
+        }
+      }
+
       const context = `书名：${selectedBook.title}
 故事概要：${selectedBook.synopsis}
 前一卷内容概要：${prevVolumes || '无'}
 当前卷概要：${currentVolume?.synopsis || '无'}
-第${selectedChapter.chapterIdx + 1}章概要：${selectedChapter.chapter.synopsis}`
+第${selectedChapter.chapterIdx + 1}章概要：${selectedChapter.chapter.synopsis}${mainVersionContext}`
 
       const res = await fetch(`${API}/ai/generate-chapter`, {
         method: 'POST',
@@ -380,17 +403,15 @@ export default function NovelWorkbench() {
     }
   }, [selectedBook, selectedChapter, API])
 
-  // Load chapter body version history
+  // Load chapter body version history (returns data without setting state)
   const loadChapterVersions = useCallback(async () => {
     if (!selectedBook || !selectedChapter) return null
-    setChapterVersions([]) // Reset immediately to prevent stale data
     try {
       const res = await fetch(
         `${API}/ai/books/${selectedBook.id}/volumes/${selectedChapter.volumeIdx}/chapters/${selectedChapter.chapterIdx}/versions`,
       )
       if (res.ok) {
         const data = await res.json()
-        setChapterVersions(data)
         return data
       }
     } catch {
@@ -398,6 +419,44 @@ export default function NovelWorkbench() {
     }
     return null
   }, [selectedBook, selectedChapter, API])
+
+  // Load all book-level chapter body versions (for sidebar display)
+  const loadBookBodyVersions = useCallback(async () => {
+    if (!selectedBook) return
+    try {
+      const res = await fetch(`${API}/ai/books/${selectedBook.id}/all-chapter-versions`)
+      if (res.ok) {
+        const data = await res.json()
+        setBookBodyVersions(data)
+        // Also load main version
+        const mainRes = await fetch(`${API}/ai/books/${selectedBook.id}/main-version`)
+        if (mainRes.ok) {
+          const main = await mainRes.json()
+          setMainVersionId(main?.id || null)
+        }
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [selectedBook, API])
+
+  // Set a chapter body version as the main version for this book
+  const setMainVersion = useCallback(async (versionId: number) => {
+    if (!selectedBook) return
+    try {
+      const res = await fetch(`${API}/ai/books/${selectedBook.id}/set-main-version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId }),
+      })
+      if (res.ok) {
+        setSuccess('✅ 已设为主版本')
+        await loadBookBodyVersions()
+      }
+    } catch {
+      setError('设置主版本失败')
+    }
+  }, [selectedBook, API, loadBookBodyVersions])
 
   // Open chapter modal - also load version history
   const openChapterModal = async (volIdx: number, chIdx: number, ch: VolumeChapter) => {
@@ -431,6 +490,9 @@ export default function NovelWorkbench() {
         // Non-critical
       }
     }
+
+    // Load book-level chapter body versions for sidebar
+    await loadBookBodyVersions()
   }
 
   // Save chapter body version (manual save)
@@ -452,13 +514,14 @@ export default function NovelWorkbench() {
       if (res.ok) {
         setSuccess('✅ 章节版本已保存')
         await loadChapterVersions()
+        await loadBookBodyVersions()
       }
     } catch {
       setError('保存版本失败')
     } finally {
       setChapterSaving(false)
     }
-  }, [selectedBook, selectedChapter, chapterBody, API, loadChapterVersions])
+  }, [selectedBook, selectedChapter, chapterBody, API, loadChapterVersions, loadBookBodyVersions])
 
   // AI refine chapter body
   const handleRefineChapterBody = async () => {
@@ -523,6 +586,18 @@ export default function NovelWorkbench() {
     setChapterSelectedVersionId(version.id)
     setChapterBody(version.body)
     await loadChapterVersions()
+    // Also update displayed volumes to this version's data
+    if (selectedBook) {
+      try {
+        const res = await fetch(`${API}/ai/books/${selectedBook.id}/versions/${version.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          setDisplayedVolumes(data.volumes || [])
+        }
+      } catch {
+        // Non-critical
+      }
+    }
   }
 
   // Delete a chapter body version
@@ -544,6 +619,7 @@ export default function NovelWorkbench() {
             setChapterBody(updatedVersions[0].body)
           }
         }
+        await loadBookBodyVersions()
       }
     } catch {
       setError('删除版本失败')
@@ -903,51 +979,71 @@ export default function NovelWorkbench() {
                   )}
                 </Box>
 
-                <Box sx={{ flex: 1, overflow: 'auto' }}>
-                  {chapterVersions.length === 0 ? (
+<Box sx={{ flex: 1, overflow: 'auto' }}>
+                  {bookBodyVersions.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 3, px: 1 }}>
                       暂无正文版本记录
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#666' }}>
+                        在编辑模式生成正文后点击保存
+                      </Typography>
                     </Typography>
                   ) : (
                     <List dense>
-                      {chapterVersions.map((ver) => (
+                      {bookBodyVersions.map((ver) => (
                         <ListItemButton
                           key={ver.id}
                           component="li"
-                          selected={chapterSelectedVersionId === ver.id}
+                          selected={mainVersionId === ver.id}
                           onClick={() => restoreChapterVersion(ver)}
                           sx={{
                             mb: 0.5,
                             px: 1,
                             borderLeft: '3px solid transparent',
                             borderRadius: 1,
-                            '&.Mui-selected': { borderLeftColor: '#4fc08d', bgcolor: '#1a2e1a' },
-                            '&:hover': { borderLeftColor: '#4fc08d' },
+                            bgcolor: mainVersionId === ver.id ? '#2e1a00' : 'transparent',
+                            '&.Mui-selected': { borderLeftColor: '#ff9800', bgcolor: '#2e1a00' },
+                            '&:hover': { borderLeftColor: '#ff9800' },
                           }}
                         >
                           <ListItemText
                             primary={
-                              <Typography variant="body2" sx={{ color: chapterSelectedVersionId === ver.id ? '#4fc08d' : '#aaa', fontSize: '0.75rem' }}>
-                                v{ver.id}
+                              <Typography variant="body2" sx={{ color: mainVersionId === ver.id ? '#ff9800' : '#aaa', fontSize: '0.75rem' }}>
+                                v{ver.id} {mainVersionId === ver.id && '⭐ 主版本'}
                               </Typography>
                             }
                             secondary={
                                <>
-                                 <Typography variant="caption" sx={{ display: 'block', color: '#888', fontSize: '0.6rem' }}>
-                                   第{selectedChapter?.chapterIdx + 1}章：{selectedChapter?.chapter?.title}
-                                 </Typography>
-                                 <Typography variant="caption" sx={{ display: 'block', color: '#666', fontSize: '0.55rem' }}>
-                                   {ver.refine_prompt?.substring(0, 20)}...
-                                 </Typography>
-                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.5rem' }}>
-                                   {ver.created_at}
-                                 </Typography>
-                               </>
-                             }
+                                  <Typography variant="caption" sx={{ display: 'block', color: '#888', fontSize: '0.6rem' }}>
+                                    第{ver.chapter_index + 1}章（卷{ver.volume_index + 1}）
+                                  </Typography>
+                                  <Typography variant="caption" sx={{ display: 'block', color: '#666', fontSize: '0.55rem' }}>
+                                    {ver.refine_prompt?.substring(0, 25)}...
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.5rem' }}>
+                                    {ver.created_at}
+                                  </Typography>
+                                </>
+                              }
                           />
                           <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Tooltip title={mainVersionId === ver.id ? '已是主版本' : '设为主版本'}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => { e.stopPropagation(); setMainVersion(ver.id); }}
+                                  disabled={mainVersionId === ver.id}
+                                  sx={{
+                                    color: mainVersionId === ver.id ? '#ff9800' : '#aaa',
+                                    '&:hover': { color: '#ff9800' },
+                                    '&.Mui-disabled': { color: '#666' },
+                                  }}
+                                >
+                                  <StarIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                             <Tooltip title="查看此版本">
-                              <IconButton size="small" sx={{ color: '#4fc08d' }}>
+                              <IconButton size="small" sx={{ color: '#4fc08d' }} onClick={(e) => { e.stopPropagation(); }}>
                                 <VisibilityIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>

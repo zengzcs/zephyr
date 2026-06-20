@@ -503,4 +503,47 @@ ${context}
     this.rawDb.prepare('DELETE FROM books WHERE id = ?').run(id);
     return { success: true };
   }
+
+  // Get all chapter body versions for a book (book-level, not chapter-specific)
+  @Get('books/:id/all-chapter-versions')
+  async getAllChapterBodyVersions(@Param('id') id: string) {
+    const versions = this.rawDb.prepare(
+      'SELECT id, book_id, volume_index, chapter_index, body, refine_prompt, created_at, is_main FROM chapter_body_versions WHERE book_id = ? ORDER BY created_at DESC',
+    ).all(id);
+    return versions;
+  }
+
+  // Set a chapter body version as the main version for a book
+  @Post('books/:id/set-main-version')
+  @HttpCode(HttpStatus.OK)
+  async setMainChapterVersion(@Param('id') id: string, @Body() body: { versionId: number }) {
+    const { versionId } = body;
+
+    // Verify the version belongs to this book
+    const version = this.rawDb.prepare(
+      'SELECT id FROM chapter_body_versions WHERE id = ? AND book_id = ?',
+    ).get(versionId, id);
+    if (!version) throw new Error('Version not found');
+
+    // Unset all other main versions first
+    this.rawDb.prepare(
+      'UPDATE chapter_body_versions SET is_main = 0 WHERE book_id = ?',
+    ).run(id);
+
+    // Set this version as main
+    this.rawDb.prepare(
+      'UPDATE chapter_body_versions SET is_main = 1 WHERE id = ?',
+    ).run(versionId);
+
+    return { success: true, versionId };
+  }
+
+  // Get the main version id for a book
+  @Get('books/:id/main-version')
+  async getMainChapterVersion(@Param('id') id: string) {
+    const version = this.rawDb.prepare(
+      'SELECT id FROM chapter_body_versions WHERE book_id = ? AND is_main = 1 LIMIT 1',
+    ).get(id);
+    return version || null;
+  }
 }
