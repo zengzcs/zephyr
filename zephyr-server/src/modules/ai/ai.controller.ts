@@ -327,7 +327,7 @@ ${context}
         { role: 'user', content: `请为第${chapterIndex}章"${chapterTitle}"生成正文。` },
       ],
       temperature: 0.8,
-      maxTokens: 4096,
+      maxTokens: 32768,
     });
 
     return {
