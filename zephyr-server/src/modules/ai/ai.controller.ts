@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { DatabaseService } from '../database/database.service';
 import { z } from 'zod';
@@ -813,7 +813,7 @@ ${context}
    * Returns the latest body for each chapter.
    */
   @Get('books/:id/all-chapter-versions')
-  async getAllChapterBodyVersions(@Param('id') id: string) {
+  async getAllChapterBodyVersions(@Param('id') id: string, @Query('limit') limit?: string) {
     // Get the latest outline version for this book
     const latestOv = this.rawDb.prepare(`
       SELECT id FROM outline_versions WHERE book_id = ? ORDER BY created_at DESC LIMIT 1
@@ -822,6 +822,8 @@ ${context}
     if (!latestOv) return [];
 
     // Get chapters that have at least one body version, along with their latest body
+    // Optionally limit to the N most recent chapters (ordered by volume/chapter index)
+    const limitNum = limit ? parseInt(limit) : Infinity;
     const chapters = this.rawDb.prepare(`
       SELECT ch.id as chapter_id, ch.volume_index, ch.chapter_index, ch.title, ch.synopsis,
              cb.body, cb.refine_prompt, cb.created_at
@@ -834,7 +836,8 @@ ${context}
       ) cb ON cb.chapter_id = ch.id
       WHERE ch.outline_version_id = ?
       ORDER BY ch.volume_index, ch.chapter_index
-    `).all(latestOv.id) as any[];
+      LIMIT ?
+    `).all(latestOv.id, limitNum === Infinity ? 9999 : limitNum) as any[];
 
     return chapters.map((ch: any) => ({
       id: ch.chapter_id,

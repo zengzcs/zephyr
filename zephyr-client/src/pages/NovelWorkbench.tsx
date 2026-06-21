@@ -319,39 +319,29 @@ export default function NovelWorkbench() {
       const currentVolume = displayedVolumes[volIdx]
       const prevVolumes = displayedVolumes.slice(0, volIdx).map(v => v.synopsis).join('\n')
 
-      // Load main version body for context reference (full body, not truncated)
+      // Load recent chapters with full body text from backend for continuity
       let mainVersionContext = ''
       let recentChaptersContext = ''
-      if (mainVersionId) {
-        try {
-          const mainVerRes = await fetch(`${API}/ai/books/${selectedBook.id}/all-chapter-versions`)
-          if (mainVerRes.ok) {
-            const allVers = await mainVerRes.json()
-            const mainVer = allVers.find((v: any) => v.id === mainVersionId)
-            if (mainVer?.body) {
-              mainVersionContext = `\n\n=== 主版本参考（第${mainVer.chapter_index + 1}章） ===\n${mainVer.body}`
-            }
+      try {
+        const recentRes = await fetch(`${API}/ai/books/${selectedBook.id}/all-chapter-versions?limit=10`)
+        if (recentRes.ok) {
+          const allVers: any[] = await recentRes.json()
+          // Build context from the most recent chapters with their full body text
+          const recentEntries = allVers.slice(-10) // most recent 10 chapters
+          const recentChapters: string[] = recentEntries.map((v: any) =>
+            `第${v.chapter_index + 1}章「${v.title}」概要：${v.synopsis}\n正文：${v.body}`
+          )
+          if (recentChapters.length > 0) {
+            recentChaptersContext = `\n\n=== 前文章节参考（剧情连续性） ===\n${recentChapters.join('\n\n---\n')}`
           }
-        } catch {
-          // Non-critical
-        }
-      }
-
-      // Load recent chapters from displayed volumes for continuity
-      const recentChapters: string[] = []
-      for (let vIdx = 0; vIdx < displayedVolumes.length; vIdx++) {
-        const vol = displayedVolumes[vIdx]
-        if (!vol?.chapters) continue
-        const chapters = typeof vol.chapters === 'string' ? JSON.parse(vol.chapters) : (vol.chapters || [])
-        for (let cIdx = 0; cIdx < chapters.length; cIdx++) {
-          const ch = chapters[cIdx]
-          if (ch?.body && ch.body.trim()) {
-            recentChapters.push(`第${cIdx + 1}章「${ch.title}」概要：${ch.synopsis}\n正文（前500字）：${ch.body.substring(0, 500)}...`)
+          // Also use the first chapter as the "主版本参考" anchor
+          const mainVer = allVers.find((v: any) => v.chapter_index === 0)
+          if (mainVer?.body) {
+            mainVersionContext = `\n\n=== 主版本参考（第1章） ===\n${mainVer.body}`
           }
         }
-      }
-      if (recentChapters.length > 0) {
-        recentChaptersContext = `\n\n=== 前文章节参考（剧情连续性） ===\n${recentChapters.slice(-5).join('\n\n---\n')}`
+      } catch {
+        // Non-critical
       }
 
       const context = `书名：${selectedBook.title}
