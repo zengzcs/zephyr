@@ -37,6 +37,11 @@ const RefineChapterDto = z.object({
   prompt: z.string().min(1).max(2000),
 });
 
+const GenerateCharacterCardDto = z.object({
+  prompt: z.string().min(1).max(500),
+  style: z.string().default('默认'),
+});
+
 interface VolumeChapter {
   title: string;
   synopsis: string;
@@ -974,5 +979,187 @@ ${context}
       volume_index: 0,
       chapter_index: 0,
     };
+  }
+
+  /**
+   * Generate a character card from a prompt.
+   */
+  @Post('characters/generate')
+  @HttpCode(HttpStatus.OK)
+  async generateCharacterCard(@Body() body: { prompt: string; style?: string }) {
+    const { prompt, style } = GenerateCharacterCardDto.parse(body);
+
+    const systemPrompt = `你是一位资深角色设计师，擅长创造生动、立体、有魅力的女性角色。请根据用户的灵感提示，生成一份详细的角色卡片。
+
+${style === '擦边劲爆' ? `
+
+=== 擦边劲爆风格准则 ===
+- 外貌描写注重身材曲线、皮肤质感、发丝飘动、肢体动作的诱惑感
+- 身体数据要具体（三围数值），突出女性特征
+- 性格中可以包含"天然呆""傲娇""御姐""人妻"等萌属性
+- 与男主关系中要有"服务感"：主动关心、肢体接触、暧昧互动
+- 穿搭风格可以偏性感（露肩、短裙、包臀裙、丝袜等）
+- 代表色选择柔和、暧昧的色调
+- 擦边指数：1-10分，擦边劲爆风格默认 7+
+- 隐藏属性可以增加"私下里很粘人""只有男主见过的一面"等
+- 对男主态度可以是"害羞但主动""表面冷淡实则关心"等反差萌
+
+擦边劲爆风格的核心是：抽象幻想、不露骨但暧昧、女性服务男主、众星捧月感。用意象和氛围代替直接描写，保持"似露非露"的韵味。` : ''}
+
+请严格按照以下 JSON 格式输出，不要包含任何额外文字或 markdown 标记：
+{
+  "name": "角色姓名",
+  "title": "称号或别名",
+  "age": 25,
+  "occupation": "身份/职业",
+  "appearance": "外貌特征（详细描写，包括发型、发色、眼睛、脸型、皮肤等）",
+  "figure": "身材描写（整体体型、曲线、气质）",
+  "measurements": "身体数据（如：B92/W58/H90）",
+  "personality": "性格描述（详细的多维度性格分析）",
+  "fashion": "穿搭风格描述",
+  "color": "代表色",
+  "archetype": "萌点/属性（如：傲娇、御姐、人妻、天然呆、病娇等）",
+  "background": "背景故事（详细，包含过去经历、重要事件、内心创伤或秘密）",
+  "relationship": "与男主的关系定位",
+  "attitude": "对男主的态度",
+  "affection": "好感度倾向（如：暗恋中、暧昧期、已确立关系等）",
+  "ability": "特殊能力或技能",
+  "hidden_traits": "隐藏属性（2-3个，不为人知的特点）",
+  "catchphrase": "经典台词（一句有代表性的话）",
+  "suggestiveness": 7,
+  "service_tendency": "服务倾向描述（如：喜欢为男主准备早餐、主动帮男主整理衣领等）"
+}
+
+要求：
+1. 姓名要有辨识度，符合角色背景
+2. 外貌描写要具体生动，让人能在脑海中勾勒出形象
+3. 性格要立体，有优点也有小缺点
+4. 背景故事要有深度，能解释角色的性格形成
+5. 擦边劲爆风格下，身体数据和外貌描写要突出女性魅力
+6. 隐藏属性要出人意料但合理，增加角色层次感
+7. 经典台词要符合角色性格，有记忆点`;
+
+    const userPrompt = `请根据以下灵感，生成一个完整的女性角色卡片：
+
+"${prompt}"`;
+
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await this.aiService.chatCompletion({
+      messages,
+      temperature: 0.85,
+      maxTokens: 8192,
+    });
+
+    // Parse the JSON response
+    let card: any;
+    try {
+      let jsonStr = response.content.trim();
+      jsonStr = jsonStr.replace(/^\uFEFF/, '');
+      const markdownMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (markdownMatch) {
+        jsonStr = markdownMatch[1].trim();
+      }
+      try {
+        card = JSON.parse(jsonStr);
+      } catch {
+        let cleaned = jsonStr
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*\]/g, ']')
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '');
+        cleaned = cleaned.trim();
+        card = JSON.parse(cleaned);
+      }
+    } catch (err) {
+      throw new Error(`AI 返回格式错误，无法解析为 JSON: ${response.content.substring(0, 200)}...`);
+    }
+
+    // Save to database
+    const stmt = this.rawDb.prepare(`
+      INSERT INTO characters (prompt, card_json, created_at)
+      VALUES (?, ?, datetime('now'))
+    `);
+    const result = stmt.run(
+      prompt,
+      JSON.stringify(card),
+    );
+
+    return {
+      success: true,
+      characterId: result.lastInsertRowid,
+      card,
+    };
+  }
+
+  /**
+   * List all character cards.
+   */
+  @Get('characters')
+  async listCharacters() {
+    const rows = this.rawDb.prepare(`
+      SELECT id, prompt, card_json, created_at FROM characters ORDER BY created_at DESC
+    `).all() as any[];
+
+    return rows.map((row: any) => ({
+      id: row.id,
+      prompt: row.prompt,
+      card: JSON.parse(row.card_json),
+      created_at: row.created_at,
+    }));
+  }
+
+  /**
+   * Get a specific character card.
+   */
+  @Get('characters/:id')
+  async getCharacter(@Param('id') id: string) {
+    const row = this.rawDb.prepare(`
+      SELECT id, prompt, card_json, created_at FROM characters WHERE id = ?
+    `).get(id) as any;
+
+    if (!row) throw new Error('Character not found');
+
+    return {
+      id: row.id,
+      prompt: row.prompt,
+      card: JSON.parse(row.card_json),
+      created_at: row.created_at,
+    };
+  }
+
+  /**
+   * Update a character card (save edited version).
+   */
+  @Post('characters/:id')
+  @HttpCode(HttpStatus.OK)
+  async updateCharacter(@Param('id') id: string, @Body() body: { card: any }) {
+    const { card } = body;
+
+    const row = this.rawDb.prepare(`
+      SELECT id FROM characters WHERE id = ?
+    `).get(id) as any;
+
+    if (!row) throw new Error('Character not found');
+
+    this.rawDb.prepare(`
+      UPDATE characters SET card_json = ? WHERE id = ?
+    `).run(JSON.stringify(card), id);
+
+    return { success: true };
+  }
+
+  /**
+   * Delete a character card.
+   */
+  @Delete('characters/:id')
+  @HttpCode(HttpStatus.OK)
+  async deleteCharacter(@Param('id') id: string) {
+    const result = this.rawDb.prepare('DELETE FROM characters WHERE id = ?').run(id);
+    if (result.changes === 0) throw new Error('Character not found');
+    return { success: true };
   }
 }

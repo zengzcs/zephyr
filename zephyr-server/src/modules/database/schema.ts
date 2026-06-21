@@ -96,3 +96,13 @@ export const chapterBodies = sqliteTable('chapter_bodies', {
   // Fast lookup: "current body for a chapter (latest)"
   bodyChapterLatestIdx: index('idx_chapter_bodies_latest').on(table.chapterId, table.createdAt),
 }));
+
+// --- characters ---
+// Stores AI-generated female character cards. Each character is a complete card
+// with detailed attributes for novel workbench integration.
+export const characters = sqliteTable('characters', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  prompt: text('prompt').notNull(), // The user inspiration prompt
+  cardJson: text('card_json', { mode: 'json' }).notNull(), // Full character card data
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),
+});

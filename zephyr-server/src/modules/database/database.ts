@@ -16,6 +16,16 @@ sqlite.exec('PRAGMA foreign_keys = ON');
 // Migration: add `style` column to `books` if not exists
 try { sqlite.exec(`ALTER TABLE books ADD COLUMN style TEXT DEFAULT '默认'`); } catch {}
 
+// Migration: create characters table for character card workbench
+try {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS characters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt TEXT NOT NULL,
+    card_json TEXT NOT NULL,
+    created_at INTEGER DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+  )`);
+} catch {}
+
 export const db = drizzle(sqlite);
 
 export type DatabaseType = typeof db;

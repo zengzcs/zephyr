@@ -4,6 +4,7 @@ import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material'
 import Home from './pages/Home'
 import Monitor from './pages/Monitor'
 import NovelWorkbench from './pages/NovelWorkbench'
+import CharacterWorkbench from './pages/CharacterWorkbench'
 
 const darkTheme = createTheme({
   palette: {
@@ -29,6 +30,9 @@ function Layout({ children }: { children: React.ReactNode }) {
             <Button color="inherit" href="/novel">
               小说工作台
             </Button>
+            <Button color="inherit" href="/characters">
+              角色卡片
+            </Button>
           </Box>
         </Toolbar>
       </AppBar>
@@ -47,6 +51,7 @@ function Root() {
             <Route path="/" element={<Home />} />
             <Route path="/monitor" element={<Monitor />} />
             <Route path="/novel" element={<NovelWorkbench />} />
+            <Route path="/characters" element={<CharacterWorkbench />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </Layout>
