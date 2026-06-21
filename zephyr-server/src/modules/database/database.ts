@@ -13,6 +13,9 @@ const sqlite = new (require('bun:sqlite').Database)(dbPath);
 sqlite.exec('PRAGMA journal_mode = WAL');
 sqlite.exec('PRAGMA foreign_keys = ON');
 
+// Migration: add `style` column to `books` if not exists
+try { sqlite.exec(`ALTER TABLE books ADD COLUMN style TEXT DEFAULT '默认'`); } catch {}
+
 export const db = drizzle(sqlite);
 
 export type DatabaseType = typeof db;

@@ -8,6 +8,7 @@ export const books = sqliteTable('books', {
   title: text('title').notNull(),
   synopsis: text('synopsis').notNull(),
   prompt: text('prompt').notNull(),
+  style: text('style').default('默认'),
   aiModel: text('ai_model').default('default'),
   status: text('status').default('generating').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),

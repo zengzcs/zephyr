@@ -19,6 +19,7 @@ const GenerateChapterDto = z.object({
   chapterSynopsis: z.string(),
   context: z.string(),
   prompt: z.string().min(1).max(5000),
+  style: z.string().default('默认'),
 });
 
 const SaveChapterDto = z.object({
@@ -279,17 +280,36 @@ export class AiController {
    */
   @Post('generate-chapter')
   @HttpCode(HttpStatus.OK)
-  async generateChapter(@Body() body: { bookId: number; chapterIndex: number; chapterTitle: string; chapterSynopsis: string; context: string; prompt: string }) {
-    const { bookId, chapterIndex, chapterTitle, chapterSynopsis, context, prompt } = GenerateChapterDto.parse(body);
+  async generateChapter(@Body() body: z.infer<typeof GenerateChapterDto>) {
+    const { bookId, chapterIndex, chapterTitle, chapterSynopsis, context, prompt, style } = GenerateChapterDto.parse(body);
 
     const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
     if (!book) throw new Error('Book not found');
+
+    // Style-specific writing guidelines
+    const styleGuidelines: Record<string, string> = {
+      '擦边劲爆': `
+
+=== 擦边劲爆风格要求 ===
+- **女性互动密集**：每章至少2-3次与女性角色的互动（肢体接触、眼神交流、暧昧对话）
+- **服务感强**：女性角色主动为男主提供便利/服务（按摩、喂水、整理衣物、疗伤等）
+- **抽象幻想擦边**：不露骨但暧昧，用比喻和暗示（如"柔软的触感"、"若有若无的体香"、"温热的吐息拂过耳畔"）
+- **身体描写重点**：注重女性角色的身材曲线、动作姿态、皮肤质感、发丝飘动
+- **爽感拉满**：男主被多位女性围绕、争抢、讨好，享受众星捧月感
+- **轻挑调情**：对话中穿插撩拨和回应，保持张力不点破
+- **禁忌**：避免直接露骨词汇，用意象和氛围代替；不要过度色情，保持"似露非露"的韵味`,
+      '战锤': '',
+    };
+
+    const styleText = styleGuidelines[style] || '';
 
     const systemPrompt = `你是一位专业的网络小说作家，擅长创作冒险感强、危机感十足、让人不忍罢读的故事。根据以下上下文信息，为指定章节生成详细的正文内容。
 
 ${context}
 
 用户要求：${prompt}
+
+${styleText}
 
 请直接输出章节正文，不要包含章节标题。字数至少3000字，使用中文写作。
 
@@ -329,6 +349,11 @@ ${context}
       temperature: 0.8,
       maxTokens: 32768,
     });
+
+    // Persist selected style to the book
+    if (style && style !== '默认') {
+      this.rawDb.prepare('UPDATE books SET style = ? WHERE id = ?').run(style, bookId);
+    }
 
     return {
       success: true,

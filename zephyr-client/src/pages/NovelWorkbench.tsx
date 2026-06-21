@@ -24,7 +24,11 @@ import {
   DialogActions,
   Tab,
   Tabs,
- } from '@mui/material'
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+} from '@mui/material'
 import {
    Delete as DeleteIcon,
    ExpandMore as ExpandMoreIcon,
@@ -71,6 +75,7 @@ interface Book {
   title: string
   synopsis: string
   prompt: string
+  style?: string
   status: string
   created_at: string
   updatedAt: string
@@ -138,6 +143,9 @@ export default function NovelWorkbench() {
   const [chapterRefinePrompt, setChapterRefinePrompt] = useState('')
   const [chapterRefining, setChapterRefining] = useState(false)
   const [chapterSaving, setChapterSaving] = useState(false)
+
+  // Style selection for chapter generation
+  const [selectedStyle, setSelectedStyle] = useState('默认')
 
   // Reading mode state
   const [chapterSelectedVersionId, setChapterSelectedVersionId] = useState<number | null>(null)
@@ -225,6 +233,11 @@ export default function NovelWorkbench() {
             // No version history — use the book's volumes directly (legacy books without version feature)
             setDisplayedVolumes(data.volumes || [])
           }
+        }
+
+        // Restore book's previously selected style
+        if (data.style) {
+          setSelectedStyle(data.style)
         }
 
         // Load all book-level chapter body versions (for sidebar)
@@ -360,6 +373,7 @@ export default function NovelWorkbench() {
           chapterSynopsis: selectedChapter.chapter.synopsis,
           context,
           prompt: chapterAiPrompt.trim(),
+          style: selectedStyle,
         }),
       })
 
@@ -1268,6 +1282,25 @@ export default function NovelWorkbench() {
                         size="small"
                         sx={{ mb: 1 }}
                       />
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                          <InputLabel sx={{ color: '#999' }}>风格</InputLabel>
+                          <Select
+                            value={selectedStyle}
+                            label="风格"
+                            onChange={(e) => setSelectedStyle(e.target.value)}
+                            sx={{
+                              color: '#e0e0e0',
+                              '& .MuiOutlinedInput-notchedOutline': { borderColor: '#333' },
+                              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#666' },
+                            }}
+                          >
+                            <MenuItem value="默认">默认</MenuItem>
+                            <MenuItem value="擦边劲爆">擦边劲爆</MenuItem>
+                            <MenuItem value="战锤">战锤</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Box>
                       <Button
                         fullWidth
                         variant="contained"
