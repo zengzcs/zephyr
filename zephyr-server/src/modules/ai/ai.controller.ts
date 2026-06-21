@@ -1162,4 +1162,174 @@ ${style === '擦边劲爆' ? `
     if (result.changes === 0) throw new Error('Character not found');
     return { success: true };
   }
+
+  /**
+   * Refine a character card via AI.
+   */
+  @Post('characters/:id/refine')
+  @HttpCode(HttpStatus.OK)
+  async refineCharacterCard(@Param('id') id: string, @Body() body: { prompt: string }) {
+    const { prompt } = z.object({ prompt: z.string().min(1).max(2000) }).parse(body);
+
+    const row = this.rawDb.prepare(`
+      SELECT card_json FROM characters WHERE id = ?
+    `).get(id) as { card_json: string } | undefined;
+
+    if (!row) throw new Error('Character not found');
+
+    const card = JSON.parse(row.card_json);
+    const cardJsonStr = JSON.stringify(card, null, 2);
+
+    const systemPrompt = `你是一位资深角色设计师。用户将提供一个角色卡片和修改要求，请根据要求调整角色卡片。
+
+请严格按照以下 JSON 格式输出（字段不变），不要包含任何额外文字或 markdown 标记：
+{
+  "name": "角色姓名",
+  "title": "称号或别名",
+  "age": 25,
+  "occupation": "身份/职业",
+  "appearance": "外貌特征",
+  "figure": "身材描写",
+  "measurements": "身体数据",
+  "personality": "性格描述",
+  "fashion": "穿搭风格",
+  "color": "代表色",
+  "archetype": "萌点/属性",
+  "background": "背景故事",
+  "relationship": "与男主的关系定位",
+  "attitude": "对男主的态度",
+  "affection": "好感度倾向",
+  "ability": "特殊能力或技能",
+  "hidden_traits": ["隐藏属性1", "隐藏属性2"],
+  "catchphrase": "经典台词",
+  "suggestiveness": 7,
+  "service_tendency": "服务倾向描述"
+}
+
+要求：
+- 保留原卡片的核心设定（姓名、年龄、职业等不变）
+- 根据用户要求对描述性字段进行调整
+- 保持角色的一致性和立体感`;
+
+    const userPrompt = `当前角色卡片：
+${cardJsonStr}
+
+修改要求：${prompt}`;
+
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await this.aiService.chatCompletion({
+      messages,
+      temperature: 0.8,
+      maxTokens: 8192,
+    });
+
+    // Parse the JSON response
+    let refinedCard: any;
+    try {
+      let jsonStr = response.content.trim();
+      jsonStr = jsonStr.replace(/^\uFEFF/, '');
+      const markdownMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (markdownMatch) {
+        jsonStr = markdownMatch[1].trim();
+      }
+      try {
+        refinedCard = JSON.parse(jsonStr);
+      } catch {
+        let cleaned = jsonStr
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*\]/g, ']')
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '');
+        cleaned = cleaned.trim();
+        refinedCard = JSON.parse(cleaned);
+      }
+    } catch (err) {
+      throw new Error(`AI 返回格式错误，无法解析为 JSON: ${response.content.substring(0, 200)}...`);
+    }
+
+    // Save the refined card as a new version in version_history table
+    const versionStmt = this.rawDb.prepare(`
+      INSERT INTO character_versions (character_id, card_json, refine_prompt, created_at)
+      VALUES (?, ?, ?, datetime('now'))
+    `);
+    versionStmt.run(id, JSON.stringify(refinedCard), prompt);
+
+    // Update the main card
+    this.rawDb.prepare(`
+      UPDATE characters SET card_json = ? WHERE id = ?
+    `).run(JSON.stringify(refinedCard), id);
+
+    return {
+      success: true,
+      card: refinedCard,
+    };
+  }
+
+  /**
+   * List version history for a character card.
+   */
+  @Get('characters/:id/versions')
+  async getCharacterVersions(@Param('id') id: string) {
+    // First check if character exists
+    const charRow = this.rawDb.prepare('SELECT id FROM characters WHERE id = ?').get(id) as any;
+    if (!charRow) throw new Error('Character not found');
+
+    const versions = this.rawDb.prepare(`
+      SELECT id, character_id, card_json, refine_prompt, created_at
+      FROM character_versions
+      WHERE character_id = ?
+      ORDER BY created_at DESC
+    `).all(id) as any[];
+
+    return versions.map((v: any) => ({
+      id: v.id,
+      refine_prompt: v.refine_prompt,
+      created_at: v.created_at,
+      card: JSON.parse(v.card_json),
+    }));
+  }
+
+  /**
+   * Get a specific version of a character card.
+   */
+  @Get('characters/:id/versions/:versionId')
+  async getCharacterVersion(@Param('id') id: string, @Param('versionId') versionId: string) {
+    const row = this.rawDb.prepare(`
+      SELECT character_id, card_json, refine_prompt, created_at
+      FROM character_versions
+      WHERE id = ? AND character_id = ?
+    `).get(versionId, id) as any;
+
+    if (!row) throw new Error('Version not found');
+
+    return {
+      id: row.id,
+      refine_prompt: row.refine_prompt,
+      created_at: row.created_at,
+      card: JSON.parse(row.card_json),
+    };
+  }
+
+  /**
+   * Restore a version as the current card.
+   */
+  @Post('characters/:id/restore-version/:versionId')
+  @HttpCode(HttpStatus.OK)
+  async restoreCharacterVersion(@Param('id') id: string, @Param('versionId') versionId: string) {
+    const row = this.rawDb.prepare(`
+      SELECT card_json FROM character_versions WHERE id = ? AND character_id = ?
+    `).get(versionId, id) as any;
+
+    if (!row) throw new Error('Version not found');
+
+    this.rawDb.prepare(`
+      UPDATE characters SET card_json = ? WHERE id = ?
+    `).run(row.card_json, id);
+
+    return { success: true };
+  }
 }

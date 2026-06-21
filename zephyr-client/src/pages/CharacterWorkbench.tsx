@@ -22,6 +22,13 @@ import {
   InputLabel,
   Slider,
   Grid,
+  Tabs,
+  Tab,
+  List,
+  ListItemButton,
+  ListItemText,
+  ListItemSecondaryAction,
+  Tooltip,
 } from '@mui/material'
 import {
   Person as PersonIcon,
@@ -32,6 +39,9 @@ import {
   Close as CloseIcon,
   Favorite as FavoriteIcon,
   Star as StarIcon,
+  History as HistoryIcon,
+  Restore as RestoreIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material'
 
 interface CharacterCard {
@@ -64,6 +74,13 @@ interface CharacterEntry {
   created_at: string
 }
 
+interface CharacterVersion {
+  id: number
+  refine_prompt: string
+  created_at: string
+  card: CharacterCard
+}
+
 export default function CharacterWorkbench() {
   const [prompt, setPrompt] = useState('')
   const [selectedStyle, setSelectedStyle] = useState('默认')
@@ -72,9 +89,17 @@ export default function CharacterWorkbench() {
   const [success, setSuccess] = useState<string | null>(null)
   const [characters, setCharacters] = useState<CharacterEntry[]>([])
   const [viewingCard, setViewingCard] = useState<CharacterEntry | null>(null)
+  const [viewMode, setViewMode] = useState<'read' | 'edit'>('read')
   const [editingCard, setEditingCard] = useState<CharacterEntry | null>(null)
   const [editCardData, setEditCardData] = useState<CharacterCard | null>(null)
   const [saveLoading, setSaveLoading] = useState(false)
+
+  // Refine mode state
+  const [refinePrompt, setRefinePrompt] = useState('')
+  const [refining, setRefining] = useState(false)
+  const [versions, setVersions] = useState<CharacterVersion[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
 
   const API = 'http://192.168.1.200:5010'
 
@@ -93,6 +118,21 @@ export default function CharacterWorkbench() {
   useEffect(() => {
     fetchCharacters()
   }, [])
+
+  const fetchVersions = async (charId: number) => {
+    setLoadingVersions(true)
+    try {
+      const res = await fetch(`${API}/ai/characters/${charId}/versions`)
+      if (res.ok) {
+        const data = await res.json()
+        setVersions(data)
+      }
+    } catch {
+      // Non-critical
+    } finally {
+      setLoadingVersions(false)
+    }
+  }
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -167,6 +207,69 @@ export default function CharacterWorkbench() {
     }
   }
 
+  const handleRefine = async () => {
+    if (!refinePrompt.trim() || !viewingCard) return
+    setRefining(true)
+    setError(null)
+    try {
+      const res = await fetch(`${API}/ai/characters/${viewingCard.id}/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: refinePrompt.trim() }),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setViewingCard({ ...viewingCard, card: result.card })
+        setRefinePrompt('')
+        setSuccess('✅ AI 调整完成')
+        // Refresh versions
+        await fetchVersions(viewingCard.id)
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        setError(errData.message || 'AI 调整失败')
+      }
+    } catch (err: any) {
+      setError(err.message || 'AI 调整失败')
+    } finally {
+      setRefining(false)
+    }
+  }
+
+  const handleRestoreVersion = async (versionId: number) => {
+    if (!viewingCard) return
+    try {
+      const res = await fetch(`${API}/ai/characters/${viewingCard.id}/restore-version/${versionId}`)
+      if (res.ok) {
+        // Refresh the card data
+        const verRes = await fetch(`${API}/ai/characters/${viewingCard.id}/versions/${versionId}`)
+        if (verRes.ok) {
+          const verData = await verRes.json()
+          setViewingCard({ ...viewingCard, card: verData.card })
+          setSuccess('✅ 已恢复该版本')
+        }
+      }
+    } catch {
+      setError('恢复版本失败')
+    }
+  }
+
+  const handleViewCard = async (entry: CharacterEntry) => {
+    setViewingCard(entry)
+    setViewMode('read')
+    setRefinePrompt('')
+    setSelectedVersionId(null)
+    await fetchVersions(entry.id)
+  }
+
+  const formatTime = (t: string) => {
+    if (!t) return ''
+    try {
+      return new Date(t).toLocaleString('zh-CN')
+    } catch {
+      return t
+    }
+  }
+
   const renderCardChip = (color: string) => (
     <Box
       sx={{
@@ -215,9 +318,7 @@ export default function CharacterWorkbench() {
       </Box>
 
       {/* Generation Panel */}
-      <Paper
-        sx={{ p: 3, mb: 3, bgcolor: '#1a1a2e', borderRadius: 2, border: '1px solid #333' }}
-      >
+      <Paper sx={{ p: 3, mb: 3, bgcolor: '#1a1a2e', borderRadius: 2, border: '1px solid #333' }}>
         <Typography variant="subtitle1" sx={{ color: '#e040fb', mb: 2, fontWeight: 'bold' }}>
           <AutoFixHighIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
           AI 角色生成
@@ -297,9 +398,7 @@ export default function CharacterWorkbench() {
       </Typography>
 
       {characters.length === 0 ? (
-        <Paper
-          sx={{ p: 6, textAlign: 'center', bgcolor: '#1a1a2e', borderRadius: 2, border: '1px solid #333' }}
-        >
+        <Paper sx={{ p: 6, textAlign: 'center', bgcolor: '#1a1a2e', borderRadius: 2, border: '1px solid #333' }}>
           <PersonIcon sx={{ fontSize: 64, color: '#333', mb: 2 }} />
           <Typography variant="h6" sx={{ color: '#666', mb: 1 }}>
             暂无角色卡片
@@ -321,7 +420,7 @@ export default function CharacterWorkbench() {
                   transition: 'border-color 0.2s',
                   '&:hover': { borderColor: '#e040fb' },
                 }}
-                onClick={() => setViewingCard(entry)}
+                onClick={() => handleViewCard(entry)}
               >
                 <CardContent sx={{ p: 2 }}>
                   {/* Name and Title */}
@@ -393,14 +492,6 @@ export default function CharacterWorkbench() {
                   >
                     "{entry.card.catchphrase.substring(0, 40)}..."
                   </Typography>
-
-                  {/* Prompt Preview */}
-                  <Typography
-                    variant="caption"
-                    sx={{ color: '#555', display: 'block', mt: 0.5 }}
-                  >
-                    灵感：{entry.prompt.substring(0, 50)}...
-                  </Typography>
                 </CardContent>
               </Card>
             </Grid>
@@ -408,17 +499,18 @@ export default function CharacterWorkbench() {
         </Grid>
       )}
 
-      {/* View Card Dialog */}
+      {/* View/Edit Card Dialog with dual modes + version history */}
       <Dialog
         open={!!viewingCard}
-        onClose={() => setViewingCard(null)}
-        maxWidth="md"
+        onClose={() => { setViewingCard(null); setViewMode('read') }}
+        maxWidth="lg"
         fullWidth
         PaperProps={cardPaperProps}
+        sx={{ maxHeight: '90vh' }}
       >
         {viewingCard && (
           <>
-            <DialogTitle sx={{ pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <DialogTitle sx={{ pb: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box>
                 <Typography variant="h5" sx={{ color: '#e040fb' }}>
                   {viewingCard.card.name}
@@ -429,28 +521,258 @@ export default function CharacterWorkbench() {
                   </Typography>
                 )}
               </Box>
-              <IconButton onClick={() => setViewingCard(null)} sx={{ color: '#999' }}>
+              <IconButton onClick={() => { setViewingCard(null); setViewMode('read') }} sx={{ color: '#999' }}>
                 <CloseIcon />
               </IconButton>
             </DialogTitle>
             <Divider />
-            <DialogContent dividers sx={{ p: 3 }}>
-              <CharacterCardDetail card={viewingCard.card} />
+
+            {/* Mode Tabs */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
+              <Tabs
+                value={viewMode === 'read' ? 0 : 1}
+                onChange={(_, v) => setViewMode(v === 0 ? 'read' : 'edit')}
+                sx={{
+                  '& .MuiTab-root': { color: '#999', '&.Mui-selected': { color: '#e040fb' } },
+                }}
+              >
+                <Tab icon={<VisibilityIcon />} label="阅读模式" iconPosition="start" />
+                <Tab icon={<EditIcon />} label="编辑模式" iconPosition="start" />
+              </Tabs>
+            </Box>
+
+            <DialogContent dividers sx={{ p: 0, display: 'flex', height: 'calc(90vh - 200px)' }}>
+              {/* Left: Card content */}
+              <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+                {viewMode === 'read' ? (
+                  <CharacterCardDetail card={viewingCard.card} renderCardChip={renderCardChip} renderSuggestiveness={renderSuggestiveness} />
+                ) : (
+                  <>
+                    {/* AI Refine Section */}
+                    <Box sx={{ mb: 3, p: 2, bgcolor: '#1a1a2e', borderRadius: 1, border: '1px solid #333' }}>
+                      <Typography variant="subtitle2" sx={{ color: '#e040fb', mb: 1 }}>
+                        <AutoFixHighIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        AI 调整角色
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        placeholder="输入调整要求，例如：把性格改得更傲娇一些、增加一个隐藏身份、让穿搭更性感..."
+                        value={refinePrompt}
+                        onChange={(e) => setRefinePrompt(e.target.value)}
+                        variant="outlined"
+                        size="small"
+                        sx={{
+                          mb: 1,
+                          '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                          '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                        }}
+                      />
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        onClick={handleRefine}
+                        disabled={refining || !refinePrompt.trim()}
+                        startIcon={refining ? <CircularProgress size={16} color="inherit" /> : <AutoFixHighIcon />}
+                        size="small"
+                        sx={{ bgcolor: '#e040fb', '&:hover': { bgcolor: '#c2185b' } }}
+                      >
+                        {refining ? 'AI 调整中...' : '✨ AI 调整'}
+                      </Button>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        AI 将根据你的要求修改角色卡片的描述字段，核心设定（姓名/年龄/职业）保持不变
+                      </Typography>
+                    </Box>
+
+                    {/* Quick Edit Section */}
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" sx={{ color: '#ff9800', mb: 1 }}>
+                        快速编辑（仅修改文本字段）
+                      </Typography>
+                      <Grid container spacing={1.5}>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            label="外貌特征"
+                            value={viewingCard.card.appearance}
+                            onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, appearance: e.target.value } })}
+                            size="small"
+                            multiline
+                            rows={2}
+                            sx={{
+                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            label="性格描述"
+                            value={viewingCard.card.personality}
+                            onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, personality: e.target.value } })}
+                            size="small"
+                            multiline
+                            rows={2}
+                            sx={{
+                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            label="背景故事"
+                            value={viewingCard.card.background}
+                            onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, background: e.target.value } })}
+                            size="small"
+                            multiline
+                            rows={3}
+                            sx={{
+                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            label="经典台词"
+                            value={viewingCard.card.catchphrase}
+                            onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, catchphrase: e.target.value } })}
+                            size="small"
+                            sx={{
+                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                            }}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
+
+                    {/* Save Button */}
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                      <Button
+                        variant="contained"
+                        onClick={async () => {
+                          setSaveLoading(true)
+                          try {
+                            const res = await fetch(`${API}/ai/characters/${viewingCard.id}`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ card: viewingCard.card }),
+                            })
+                            if (res.ok) {
+                              setSuccess('✅ 已保存修改')
+                              fetchCharacters()
+                            }
+                          } catch {
+                            setError('保存失败')
+                          } finally {
+                            setSaveLoading(false)
+                          }
+                        }}
+                        disabled={saveLoading}
+                        startIcon={saveLoading ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                        sx={{ bgcolor: '#4fc08d', '&:hover': { bgcolor: '#388e3c' } }}
+                      >
+                        {saveLoading ? '保存中...' : '💾 保存修改'}
+                      </Button>
+                    </Box>
+                  </>
+                )}
+              </Box>
+
+              {/* Right: Version history sidebar (edit mode only) */}
+              {viewMode === 'edit' && (
+                <Box
+                  sx={{
+                    width: 280,
+                    borderLeft: '1px solid #333',
+                    bgcolor: '#12122a',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <Box sx={{ p: 2, borderBottom: '1px solid #333' }}>
+                    <Typography variant="subtitle2" sx={{ color: '#ff9800', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <HistoryIcon fontSize="small" />
+                      历史版本
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 0.3 }}>
+                      {versions.length} 个版本
+                    </Typography>
+                  </Box>
+
+                  {loadingVersions ? (
+                    <Box sx={{ p: 2, textAlign: 'center' }}>
+                      <CircularProgress size={20} sx={{ color: '#666' }} />
+                    </Box>
+                  ) : versions.length === 0 ? (
+                    <Box sx={{ p: 2 }}>
+                      <Typography variant="body2" sx={{ color: '#555', textAlign: 'center' }}>
+                        暂无历史版本
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#444', display: 'block', mt: 0.5, textAlign: 'center' }}>
+                        使用 AI 调整后将自动记录版本
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <List sx={{ overflow: 'auto', flex: 1 }}>
+                      {versions.map((v) => (
+                        <ListItemButton
+                          key={v.id}
+                          selected={selectedVersionId === v.id}
+                          onClick={() => setSelectedVersionId(v.id)}
+                          sx={{
+                            borderBottom: '1px solid #222',
+                            '&.Mui-selected': { bgcolor: '#1a1a3e' },
+                            '&:hover': { bgcolor: '#1a1a3e' },
+                          }}
+                        >
+                          <ListItemText
+                            primary={formatTime(v.created_at)}
+                            secondary={v.refine_prompt?.substring(0, 40) || '手动保存'}
+                            primaryTypographyProps={{ variant: 'body2', sx: { color: '#ccc', fontSize: '0.8rem' } }}
+                            secondaryTypographyProps={{ variant: 'caption', sx: { color: '#777', fontSize: '0.7rem' } }}
+                          />
+                          <ListItemSecondaryAction>
+                            <Tooltip title="恢复此版本">
+                              <IconButton
+                                edge="end"
+                                size="small"
+                                sx={{ color: '#4fc08d' }}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleRestoreVersion(v.id)
+                                }}
+                              >
+                                <RestoreIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </ListItemSecondaryAction>
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+              )}
             </DialogContent>
+
             <DialogActions sx={{ px: 3, pb: 2 }}>
               <Button
                 variant="outlined"
                 startIcon={<EditIcon />}
                 onClick={() => {
-                  setEditingCard(viewingCard)
-                  setEditCardData(JSON.parse(JSON.stringify(viewingCard.card)))
-                  setViewingCard(null)
+                  setViewMode('edit')
                 }}
                 sx={{ color: '#e040fb', borderColor: '#e040fb' }}
               >
-                编辑角色
+                进入编辑模式
               </Button>
-              <Button onClick={() => setViewingCard(null)} sx={{ color: '#999' }}>
+              <Button onClick={() => { setViewingCard(null); setViewMode('read') }} sx={{ color: '#999' }}>
                 关闭
               </Button>
             </DialogActions>
@@ -458,7 +780,7 @@ export default function CharacterWorkbench() {
         )}
       </Dialog>
 
-      {/* Edit Card Dialog */}
+      {/* Quick Editor Dialog (from list button) */}
       <Dialog
         open={!!editingCard}
         onClose={() => { setEditingCard(null); setEditCardData(null) }}
@@ -729,7 +1051,15 @@ export default function CharacterWorkbench() {
 /* ============================================================
    CharacterCardDetail - Sub-component for viewing a full card
    ============================================================ */
-function CharacterCardDetail({ card }: { card: CharacterCard }) {
+function CharacterCardDetail({
+  card,
+  renderCardChip,
+  renderSuggestiveness,
+}: {
+  card: CharacterCard
+  renderCardChip: (c: string) => ReactNode
+  renderSuggestiveness: (n: number) => ReactNode
+}) {
   const Section = ({ title, children }: { title: string; children: ReactNode }) => (
     <Box sx={{ mb: 2.5 }}>
       <Typography variant="subtitle2" sx={{ color: '#e040fb', fontWeight: 'bold', mb: 0.8, fontSize: '0.95rem' }}>
@@ -740,19 +1070,6 @@ function CharacterCardDetail({ card }: { card: CharacterCard }) {
       </Typography>
     </Box>
   )
-
-  const renderStars = (level: number) => {
-    const stars: ReactNode[] = []
-    for (let i = 0; i < 10; i++) {
-      stars.push(
-        <StarIcon
-          key={i}
-          sx={{ fontSize: 16, color: i < level ? '#e040fb' : '#333' }}
-        />
-      )
-    }
-    return <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2 }}>{stars}</Box>
-  }
 
   return (
     <>
@@ -783,18 +1100,7 @@ function CharacterCardDetail({ card }: { card: CharacterCard }) {
           </Typography>
         )}
         <Box sx={{ mt: 0.5 }}>
-          <Box
-            sx={{
-              width: 24,
-              height: 24,
-              borderRadius: '50%',
-              bgcolor: card.color,
-              border: '2px solid rgba(255,255,255,0.2)',
-              display: 'inline-block',
-              verticalAlign: 'middle',
-              mr: 0.5,
-            }}
-          />
+          {renderCardChip(card.color)}
           <Typography variant="body2" sx={{ color: '#aaa', verticalAlign: 'middle', ml: 0.5 }}>
             代表色：{card.color}
           </Typography>
@@ -857,7 +1163,7 @@ function CharacterCardDetail({ card }: { card: CharacterCard }) {
 
       <Section title="擦边指数">
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {renderStars(card.suggestiveness)}
+          {renderSuggestiveness(card.suggestiveness)}
           <Typography variant="body2" sx={{ color: '#e040fb', ml: 1 }}>
             {card.suggestiveness}/10
           </Typography>

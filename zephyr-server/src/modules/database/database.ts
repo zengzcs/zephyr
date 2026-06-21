@@ -26,6 +26,17 @@ try {
   )`);
 } catch {}
 
+// Migration: create character_versions table for version history
+try {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS character_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    card_json TEXT NOT NULL,
+    refine_prompt TEXT,
+    created_at INTEGER DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+  )`);
+} catch {}
+
 export const db = drizzle(sqlite);
 
 export type DatabaseType = typeof db;
