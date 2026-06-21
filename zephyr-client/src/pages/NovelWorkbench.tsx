@@ -456,7 +456,8 @@ export default function NovelWorkbench() {
 
   // Load all book-level chapter body versions (for sidebar display)
   // Each entry is the latest body for one chapter
-  const loadBookBodyVersions = useCallback(async () => {
+  // Optionally pass volumeIdx and chapterIdx to specify which chapter's versions to load
+  const loadBookBodyVersions = useCallback(async (volumeIdx?: number, chapterIdx?: number) => {
     if (!selectedBook) return
     try {
       const res = await fetch(`${API}/ai/books/${selectedBook.id}/all-chapter-versions`)
@@ -469,12 +470,14 @@ export default function NovelWorkbench() {
           const main = await mainRes.json()
           setMainVersionId(main?.id || null)
         }
-        // Filter current chapter's versions from the chapter body versions API
-        if (selectedChapter) {
+        // Load current chapter's versions using provided indices or selectedChapter state
+        const volIdx = volumeIdx ?? selectedChapter?.volumeIdx
+        const chIdx = chapterIdx ?? selectedChapter?.chapterIdx
+        if (volIdx !== undefined && chIdx !== undefined) {
           // For the current chapter, we need to get ALL body versions, not just the latest
           // Use the per-chapter versions endpoint
           const chVerRes = await fetch(
-            `${API}/ai/books/${selectedBook.id}/volumes/${selectedChapter.volumeIdx}/chapters/${selectedChapter.chapterIdx}/versions`,
+            `${API}/ai/books/${selectedBook.id}/volumes/${volIdx}/chapters/${chIdx}/versions`,
           )
           if (chVerRes.ok) {
             const chVerData = await chVerRes.json()
@@ -517,11 +520,13 @@ export default function NovelWorkbench() {
     setChapterSelectedVersionId(null)
     setChapterModalOpen(true)
 
-    // Load chapter version history and auto-fill reading mode with the latest version
+    // Load chapter version history
     const versions = await loadChapterVersions()
     if (versions && versions.length > 0) {
-      // Use the latest version's body
-      setChapterBody(versions[0].body || '')
+      // Only use the latest version's body if the chapter's body is empty/missing
+      if (!ch.body) {
+        setChapterBody(versions[0].body || '')
+      }
     } else if (!('body' in ch)) {
       // Fallback: check current chapters JSON from volumes
       // Only use fallback if the body field is completely missing (not just empty)
@@ -540,7 +545,7 @@ export default function NovelWorkbench() {
     }
 
     // Load book-level chapter body versions for sidebar
-    await loadBookBodyVersions()
+    await loadBookBodyVersions(volIdx, chIdx)
   }
 
   // Save chapter body version (manual save)
