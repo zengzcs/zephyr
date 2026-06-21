@@ -437,12 +437,15 @@ export default function NovelWorkbench() {
     }
   }, [selectedBook, selectedChapter, API])
 
-  // Load chapter body version history (returns data without setting state)
-  const loadChapterVersions = useCallback(async () => {
-    if (!selectedBook || !selectedChapter) return null
+ // Load chapter body version history (returns data without setting state)
+  // Accept volumeIdx and chapterIdx as params to avoid closure staleness
+  const loadChapterVersions = useCallback(async (volumeIdx?: number, chapterIdx?: number) => {
+    const volIdx = volumeIdx ?? selectedChapter?.volumeIdx
+    const chIdx = chapterIdx ?? selectedChapter?.chapterIdx
+    if (!selectedBook || volIdx === undefined || chIdx === undefined) return null
     try {
       const res = await fetch(
-        `${API}/ai/books/${selectedBook.id}/volumes/${selectedChapter.volumeIdx}/chapters/${selectedChapter.chapterIdx}/versions`,
+        `${API}/ai/books/${selectedBook.id}/volumes/${volIdx}/chapters/${chIdx}/versions`,
       )
       if (res.ok) {
         const data = await res.json()
@@ -520,8 +523,71 @@ export default function NovelWorkbench() {
     setChapterSelectedVersionId(null)
     setChapterModalOpen(true)
 
-    // Load chapter version history
-    const versions = await loadChapterVersions()
+    // Load chapter version history (pass indices to avoid closure staleness)
+    const versions = await loadChapterVersions(volIdx, chIdx)
+    if (versions && versions.length > 0) {
+      // Only use the latest version's body if the chapter's body is empty/missing
+      if (!ch.body) {
+        setChapterBody(versions[0].body || '')
+      }
+    } else if (!('body' in ch)) {
+      // Fallback: check current chapters JSON from volumes
+      // Only use fallback if the body field is completely missing (not just empty)
+      try {
+        const res = await fetch(`${API}/ai/books/${selectedBook?.id}/chapters/${volIdx}`)
+        if (res.ok) {
+          const currentChapters = await res.json()
+          const currentCh = currentChapters?.[chIdx]
+          if (currentCh?.body) {
+            setChapterBody(currentCh.body)
+          }
+        }
+      } catch {
+        // Non-critical
+      }
+    }
+    if (versions && versions.length > 0) {
+      // Only use the latest version's body if the chapter's body is empty/missing
+      if (!ch.body) {
+        setChapterBody(versions[0].body || '')
+      }
+    } else if (!('body' in ch)) {
+      // Fallback: check current chapters JSON from volumes
+      // Only use fallback if the body field is completely missing (not just empty)
+      try {
+        const res = await fetch(`${API}/ai/books/${selectedBook?.id}/chapters/${volIdx}`)
+        if (res.ok) {
+          const currentChapters = await res.json()
+          const currentCh = currentChapters?.[chIdx]
+          if (currentCh?.body) {
+            setChapterBody(currentCh.body)
+          }
+        }
+      } catch {
+        // Non-critical
+      }
+    }
+    if (versions && versions.length > 0) {
+      // Only use the latest version's body if the chapter's body is empty/missing
+      if (!ch.body) {
+        setChapterBody(versions[0].body || '')
+      }
+    } else if (!('body' in ch)) {
+      // Fallback: check current chapters JSON from volumes
+      // Only use fallback if the body field is completely missing (not just empty)
+      try {
+        const res = await fetch(`${API}/ai/books/${selectedBook?.id}/chapters/${volIdx}`)
+        if (res.ok) {
+          const currentChapters = await res.json()
+          const currentCh = currentChapters?.[chIdx]
+          if (currentCh?.body) {
+            setChapterBody(currentCh.body)
+          }
+        }
+      } catch {
+        // Non-critical
+      }
+    }
     if (versions && versions.length > 0) {
       // Only use the latest version's body if the chapter's body is empty/missing
       if (!ch.body) {
