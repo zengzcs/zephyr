@@ -590,19 +590,28 @@ export default function CharacterWorkbench() {
                       <Typography variant="subtitle2" sx={{ color: '#ff9800', mb: 1 }}>
                         快速编辑（仅修改文本字段）
                       </Typography>
-                      <Grid container spacing={1.5}>
+                      <Grid container spacing={2}>
                         <Grid item xs={12} md={6}>
                           <TextField
                             fullWidth
                             label="外貌特征"
                             value={viewingCard.card.appearance}
                             onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, appearance: e.target.value } })}
-                            size="small"
                             multiline
-                            rows={2}
+                            rows={4}
+                            variant="outlined"
+                            InputLabelProps={{ sx: { color: '#aaa' } }}
                             sx={{
-                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
-                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                              '& .MuiOutlinedInput-root': {
+                                bgcolor: '#0f0f23',
+                                borderRadius: 2,
+                                fontSize: '0.95rem',
+                                minHeight: '80px',
+                                '& fieldset': { borderColor: '#333', borderWidth: '2px' },
+                                '&:hover fieldset': { borderColor: '#ff9800' },
+                                '&.Mui-focused fieldset': { borderColor: '#ff9800' },
+                              },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0', p: 1.5 },
                             }}
                           />
                         </Grid>
@@ -612,40 +621,69 @@ export default function CharacterWorkbench() {
                             label="性格描述"
                             value={viewingCard.card.personality}
                             onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, personality: e.target.value } })}
-                            size="small"
                             multiline
-                            rows={2}
+                            rows={4}
+                            variant="outlined"
+                            InputLabelProps={{ sx: { color: '#aaa' } }}
                             sx={{
-                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
-                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                              '& .MuiOutlinedInput-root': {
+                                bgcolor: '#0f0f23',
+                                borderRadius: 2,
+                                fontSize: '0.95rem',
+                                minHeight: '80px',
+                                '& fieldset': { borderColor: '#333', borderWidth: '2px' },
+                                '&:hover fieldset': { borderColor: '#ff9800' },
+                                '&.Mui-focused fieldset': { borderColor: '#ff9800' },
+                              },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0', p: 1.5 },
                             }}
                           />
                         </Grid>
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12}>
                           <TextField
                             fullWidth
                             label="背景故事"
                             value={viewingCard.card.background}
                             onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, background: e.target.value } })}
-                            size="small"
                             multiline
-                            rows={3}
+                            rows={6}
+                            variant="outlined"
+                            InputLabelProps={{ sx: { color: '#aaa' } }}
                             sx={{
-                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
-                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                              '& .MuiOutlinedInput-root': {
+                                bgcolor: '#0f0f23',
+                                borderRadius: 2,
+                                fontSize: '0.95rem',
+                                minHeight: '120px',
+                                '& fieldset': { borderColor: '#333', borderWidth: '2px' },
+                                '&:hover fieldset': { borderColor: '#ff9800' },
+                                '&.Mui-focused fieldset': { borderColor: '#ff9800' },
+                              },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0', p: 1.5 },
                             }}
                           />
                         </Grid>
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12}>
                           <TextField
                             fullWidth
                             label="经典台词"
                             value={viewingCard.card.catchphrase}
                             onChange={(e) => setViewingCard({ ...viewingCard, card: { ...viewingCard.card, catchphrase: e.target.value } })}
-                            size="small"
+                            multiline
+                            rows={3}
+                            variant="outlined"
+                            InputLabelProps={{ sx: { color: '#aaa' } }}
                             sx={{
-                              '& .MuiOutlinedInput-root': { bgcolor: '#0f0f23' },
-                              '& .MuiOutlinedInput-input': { color: '#e0e0e0' },
+                              '& .MuiOutlinedInput-root': {
+                                bgcolor: '#0f0f23',
+                                borderRadius: 2,
+                                fontSize: '0.95rem',
+                                minHeight: '70px',
+                                '& fieldset': { borderColor: '#333', borderWidth: '2px' },
+                                '&:hover fieldset': { borderColor: '#ff9800' },
+                                '&.Mui-focused fieldset': { borderColor: '#ff9800' },
+                              },
+                              '& .MuiOutlinedInput-input': { color: '#e0e0e0', p: 1.5 },
                             }}
                           />
                         </Grid>
