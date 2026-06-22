@@ -271,20 +271,26 @@ export default function CharacterWorkbench() {
     }
   }
 
-  const renderCardChip = (color: string) => (
-    <Box
-      sx={{
-        width: 24,
-        height: 24,
-        borderRadius: '50%',
-        bgcolor: color,
-        border: '2px solid rgba(255,255,255,0.2)',
-        display: 'inline-block',
-        verticalAlign: 'middle',
-        mr: 0.5,
-      }}
-    />
-  )
+  const renderCardChip = (color: string) => {
+    // Hash color name to a consistent hex color
+    const hash = color.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+    const hue = hash % 360
+    const bg = `hsl(${hue}, 70%, 55%)`
+    return (
+      <Box
+        sx={{
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
+          bgcolor: bg,
+          border: '2px solid rgba(255,255,255,0.2)',
+          display: 'inline-block',
+          verticalAlign: 'middle',
+          mr: 0.5,
+        }}
+      />
+    )
+  }
 
   const renderSuggestiveness = (level: number) => {
     const stars: ReactNode[] = []
