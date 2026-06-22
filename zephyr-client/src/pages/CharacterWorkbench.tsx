@@ -45,6 +45,7 @@ import {
 } from '@mui/icons-material'
 
 interface CharacterCard {
+  id: number
   name: string
   title: string
   age: number
@@ -426,9 +427,22 @@ export default function CharacterWorkbench() {
                   {/* Name and Title */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                     <Box>
-                      <Typography variant="h6" sx={{ color: '#e040fb', fontWeight: 'bold', mb: 0.3 }}>
-                        {entry.card.name}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Typography variant="h6" sx={{ color: '#e040fb', fontWeight: 'bold' }}>
+                          {entry.card.name}
+                        </Typography>
+                        <Chip
+                          label={`ID: ${entry.card.id}`}
+                          size="small"
+                          sx={{
+                            bgcolor: '#2a2a4e',
+                            color: '#888',
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            fontFamily: 'monospace',
+                          }}
+                        />
+                      </Box>
                       {entry.card.title && (
                         <Typography variant="caption" sx={{ color: '#999' }}>
                           「{entry.card.title}」

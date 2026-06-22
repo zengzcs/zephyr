@@ -1088,6 +1088,9 @@ ${style === '擦边劲爆' ? `
       JSON.stringify(card),
     );
 
+    // Inject character ID into card
+    card.id = result.lastInsertRowid;
+
     return {
       success: true,
       characterId: result.lastInsertRowid,
@@ -1107,7 +1110,7 @@ ${style === '擦边劲爆' ? `
     return rows.map((row: any) => ({
       id: row.id,
       prompt: row.prompt,
-      card: JSON.parse(row.card_json),
+      card: { id: row.id, ...JSON.parse(row.card_json) },
       created_at: row.created_at,
     }));
   }
@@ -1126,7 +1129,7 @@ ${style === '擦边劲爆' ? `
     return {
       id: row.id,
       prompt: row.prompt,
-      card: JSON.parse(row.card_json),
+      card: { id: row.id, ...JSON.parse(row.card_json) },
       created_at: row.created_at,
     };
   }
@@ -1263,6 +1266,9 @@ ${cardJsonStr}
       UPDATE characters SET card_json = ? WHERE id = ?
     `).run(JSON.stringify(refinedCard), id);
 
+    // Inject character ID into refined card
+    refinedCard.id = parseInt(id);
+
     return {
       success: true,
       card: refinedCard,
@@ -1289,7 +1295,7 @@ ${cardJsonStr}
       id: v.id,
       refine_prompt: v.refine_prompt,
       created_at: v.created_at,
-      card: JSON.parse(v.card_json),
+      card: { id: parseInt(id), ...JSON.parse(v.card_json) },
     }));
   }
 
@@ -1310,7 +1316,7 @@ ${cardJsonStr}
       id: row.id,
       refine_prompt: row.refine_prompt,
       created_at: row.created_at,
-      card: JSON.parse(row.card_json),
+      card: { id: parseInt(id), ...JSON.parse(row.card_json) },
     };
   }
 
