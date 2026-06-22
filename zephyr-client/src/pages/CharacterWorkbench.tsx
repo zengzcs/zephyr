@@ -1139,9 +1139,14 @@ function CharacterCardDetail({
       </Section>
 
       <Section title="隐藏属性">
-        {card.hidden_traits.map((trait, i) => (
-          <Chip key={i} label={trait} size="small" sx={{ mr: 0.5, mb: 0.5, bgcolor: '#2a2a4e', color: '#ff9800' }} />
-        ))}
+        {(() => {
+          const traits = typeof (card as any).hidden_traits === 'string'
+            ? (card as any).hidden_traits.split('、').filter(Boolean)
+            : ((card as any).hidden_traits || [])
+          return traits.map((trait: string, i: number) => (
+            <Chip key={i} label={trait} size="small" sx={{ mr: 0.5, mb: 0.5, bgcolor: '#2a2a4e', color: '#ff9800' }} />
+          ))
+        })()}
       </Section>
 
       <Section title="能力">
