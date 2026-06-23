@@ -1,4 +1,6 @@
-import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus, Query, Res, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { AiService } from './ai.service';
 import { DatabaseService } from '../database/database.service';
 import { z } from 'zod';
@@ -1107,12 +1109,19 @@ ${style === '擦边劲爆' ? `
       SELECT id, prompt, card_json, created_at FROM characters ORDER BY created_at DESC
     `).all() as any[];
 
-    return rows.map((row: any) => ({
-      id: row.id,
-      prompt: row.prompt,
-      card: { id: row.id, ...JSON.parse(row.card_json) },
-      created_at: row.created_at,
-    }));
+    return rows.map((row: any) => {
+      const cardData = JSON.parse(row.card_json);
+      const imageUri = row.image
+        ? `data:image/jpeg;base64,${row.image.toString('base64')}`
+        : null;
+      return {
+        id: row.id,
+        prompt: row.prompt,
+        card: { id: row.id, ...cardData },
+        created_at: row.created_at,
+        image: imageUri,
+      };
+    });
   }
 
   /**
@@ -1126,33 +1135,19 @@ ${style === '擦边劲爆' ? `
 
     if (!row) throw new Error('Character not found');
 
+    const cardData = JSON.parse(row.card_json);
+    // Build response with image data URI if image exists
+    const imageUri = row.image
+      ? `data:image/jpeg;base64,${row.image.toString('base64')}`
+      : null;
+
     return {
       id: row.id,
       prompt: row.prompt,
-      card: { id: row.id, ...JSON.parse(row.card_json) },
+      card: { id: row.id, ...cardData },
       created_at: row.created_at,
+      image: imageUri,
     };
-  }
-
-  /**
-   * Update a character card (save edited version).
-   */
-  @Post('characters/:id')
-  @HttpCode(HttpStatus.OK)
-  async updateCharacter(@Param('id') id: string, @Body() body: { card: any }) {
-    const { card } = body;
-
-    const row = this.rawDb.prepare(`
-      SELECT id FROM characters WHERE id = ?
-    `).get(id) as any;
-
-    if (!row) throw new Error('Character not found');
-
-    this.rawDb.prepare(`
-      UPDATE characters SET card_json = ? WHERE id = ?
-    `).run(JSON.stringify(card), id);
-
-    return { success: true };
   }
 
   /**
@@ -1335,6 +1330,100 @@ ${cardJsonStr}
     this.rawDb.prepare(`
       UPDATE characters SET card_json = ? WHERE id = ?
     `).run(row.card_json, id);
+
+    return { success: true };
+  }
+
+  /**
+   * Upload an image for a character card.
+   */
+  @Post('characters/:id/image')
+  @HttpCode(HttpStatus.OK)
+  async uploadCharacterImage(
+    @Param('id') id: string,
+    @Body() body: { image: string },
+  ) {
+    const { image } = body;
+
+    const row = this.rawDb.prepare('SELECT id FROM characters WHERE id = ?').get(id) as any;
+    if (!row) throw new Error('Character not found');
+
+    // Strip data URI prefix if present (e.g., "data:image/jpeg;base64,")
+    let base64Data = image;
+    const commaIdx = image.indexOf(',');
+    if (commaIdx !== -1) {
+      base64Data = image.substring(commaIdx + 1);
+    }
+
+    // Convert base64 to Buffer and store as BLOB
+    const buffer = Buffer.from(base64Data, 'base64');
+    this.rawDb.prepare('UPDATE characters SET image = ? WHERE id = ?').run(buffer, id);
+
+    return { success: true };
+  }
+
+  /**
+   * Delete an image from a character card.
+   */
+  @Delete('characters/:id/image')
+  @HttpCode(HttpStatus.OK)
+  async deleteCharacterImage(@Param('id') id: string) {
+    const row = this.rawDb.prepare('SELECT id FROM characters WHERE id = ?').get(id) as any;
+    if (!row) throw new Error('Character not found');
+
+    this.rawDb.prepare('UPDATE characters SET image = NULL WHERE id = ?').run(id);
+    return { success: true };
+  }
+
+  /**
+   * Get a character card image.
+   */
+  @Get('characters/:id/image')
+  async getCharacterImage(@Param('id') id: string, @Res() res: Response) {
+    const row = this.rawDb.prepare(
+      'SELECT image FROM characters WHERE id = ?',
+    ).get(id) as { image: Buffer } | undefined;
+
+    if (!row || !row.image) throw new Error('Image not found');
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.send(row.image);
+  }
+
+  /**
+   * Update a character card (save edited version).
+   */
+  @Post('characters/:id')
+  @HttpCode(HttpStatus.OK)
+  async updateCharacter(
+    @Param('id') id: string,
+    @Body() body: { card: any; image?: string },
+  ) {
+    const { card, image } = body;
+
+    const row = this.rawDb.prepare(`
+      SELECT id FROM characters WHERE id = ?
+    `).get(id) as any;
+
+    if (!row) throw new Error('Character not found');
+
+    const stmt = image
+      ? this.rawDb.prepare(`UPDATE characters SET card_json = ?, image = ? WHERE id = ?`)
+      : this.rawDb.prepare(`UPDATE characters SET card_json = ? WHERE id = ?`);
+
+    if (image) {
+      // Strip data URI prefix if present
+      let base64Data = image;
+      const commaIdx = image.indexOf(',');
+      if (commaIdx !== -1) {
+        base64Data = image.substring(commaIdx + 1);
+      }
+      const buffer = Buffer.from(base64Data, 'base64');
+      stmt.run(JSON.stringify(card), buffer, id);
+    } else {
+      stmt.run(JSON.stringify(card), id);
+    }
 
     return { success: true };
   }

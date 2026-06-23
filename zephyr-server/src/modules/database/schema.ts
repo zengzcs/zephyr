@@ -104,5 +104,6 @@ export const characters = sqliteTable('characters', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   prompt: text('prompt').notNull(), // The user inspiration prompt
   cardJson: text('card_json', { mode: 'json' }).notNull(), // Full character card data
+  image: text('image'), // Base64-encoded character image
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(new Date()).notNull(),
 });

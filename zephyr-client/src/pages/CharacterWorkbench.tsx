@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import {
   Typography,
   Box,
@@ -42,6 +42,9 @@ import {
   History as HistoryIcon,
   Restore as RestoreIcon,
   Visibility as VisibilityIcon,
+  Image as ImageIcon,
+  CloudUpload as CloudUploadIcon,
+  DeleteSweep as DeleteSweepIcon,
 } from '@mui/icons-material'
 
 interface CharacterCard {
@@ -73,6 +76,7 @@ interface CharacterEntry {
   prompt: string
   card: CharacterCard
   created_at: string
+  image?: string
 }
 
 interface CharacterVersion {
@@ -94,6 +98,8 @@ export default function CharacterWorkbench() {
   const [editingCard, setEditingCard] = useState<CharacterEntry | null>(null)
   const [editCardData, setEditCardData] = useState<CharacterCard | null>(null)
   const [saveLoading, setSaveLoading] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // Refine mode state
   const [refinePrompt, setRefinePrompt] = useState('')
@@ -190,12 +196,24 @@ export default function CharacterWorkbench() {
     if (!editingCard || !editCardData) return
     setSaveLoading(true)
     try {
-      const res = await fetch(`${API}/ai/characters/${editingCard.id}`, {
+      // First save card data, then upload image if present
+      const cardRes = await fetch(`${API}/ai/characters/${editingCard.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ card: editCardData }),
       })
-      if (res.ok) {
+      if (cardRes.ok) {
+        // Upload image if present
+        if (editingCard.image) {
+          const imgRes = await fetch(`${API}/ai/characters/${editingCard.id}/image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: editingCard.image }),
+          })
+          if (!imgRes.ok) {
+            console.warn('Image upload failed but card was saved')
+          }
+        }
         setSuccess('✅ 已保存修改')
         setEditingCard(null)
         setEditCardData(null)
@@ -254,8 +272,72 @@ export default function CharacterWorkbench() {
     }
   }
 
+  const handleImageUpload = async (file: File) => {
+    if (!viewingCard || !file) return
+    setUploadingImage(true)
+    setError(null)
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch(`${API}/ai/characters/${viewingCard.id}/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64 }),
+      })
+      if (res.ok) {
+        // Update the viewing card with the new image
+        setViewingCard({ ...viewingCard, image: base64 })
+        // Also update in the characters list
+        setCharacters(prev => prev.map(c => c.id === viewingCard.id ? { ...c, image: base64 } : c))
+        setSuccess('✅ 图片上传成功')
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        setError(errData.message || '图片上传失败')
+      }
+    } catch (err: any) {
+      setError(err.message || '图片上传失败')
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const handleDeleteImage = async () => {
+    if (!viewingCard) return
+    try {
+      const res = await fetch(`${API}/ai/characters/${viewingCard.id}/image`, { method: 'DELETE' })
+      if (res.ok) {
+        setViewingCard({ ...viewingCard, image: undefined })
+        setCharacters(prev => prev.map(c => c.id === viewingCard.id ? { ...c, image: undefined } : c))
+        setSuccess('✅ 已删除图片')
+      }
+    } catch {
+      setError('删除图片失败')
+    }
+  }
+
   const handleViewCard = async (entry: CharacterEntry) => {
-    setViewingCard(entry)
+    // Fetch full card data including image
+    try {
+      const res = await fetch(`${API}/ai/characters/${entry.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setViewingCard({
+          id: data.id,
+          prompt: data.prompt,
+          card: data.card,
+          created_at: data.created_at,
+          image: data.image,
+        })
+      } else {
+        setViewingCard(entry)
+      }
+    } catch {
+      setViewingCard(entry)
+    }
     setViewMode('read')
     setRefinePrompt('')
     setSelectedVersionId(null)
@@ -306,6 +388,42 @@ export default function CharacterWorkbench() {
       )
     }
     return <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2 }}>{stars}</Box>
+  }
+
+  const renderCharacterImage = (image?: string, size: number = 120) => {
+    if (!image) {
+      return (
+        <Box
+          sx={{
+            width: size,
+            height: size,
+            borderRadius: 2,
+            bgcolor: '#2a2a4e',
+            border: '2px dashed #444',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#555',
+          }}
+        >
+          <ImageIcon sx={{ fontSize: size * 0.4 }} />
+        </Box>
+      )
+    }
+    return (
+      <Box
+        component="img"
+        src={image}
+        alt={viewingCard?.card.name || ''}
+        sx={{
+          width: size,
+          height: size,
+          borderRadius: 2,
+          objectFit: 'cover',
+          border: '2px solid #333',
+        }}
+      />
+    )
   }
 
   const cardPaperProps: Record<string, any> = {
@@ -430,6 +548,11 @@ export default function CharacterWorkbench() {
                 onClick={() => handleViewCard(entry)}
               >
                 <CardContent sx={{ p: 2 }}>
+                  {/* Character Image Thumbnail */}
+                  <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center' }}>
+                    {renderCharacterImage(entry.image, 100)}
+                  </Box>
+
                   {/* Name and Title */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                     <Box>
@@ -565,9 +688,63 @@ export default function CharacterWorkbench() {
               {/* Left: Card content */}
               <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
                 {viewMode === 'read' ? (
-                  <CharacterCardDetail card={viewingCard.card} renderCardChip={renderCardChip} renderSuggestiveness={renderSuggestiveness} />
+                  <>
+                    {/* Character Image */}
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                      {renderCharacterImage(viewingCard.image, 200)}
+                    </Box>
+                    <CharacterCardDetail card={viewingCard.card} renderCardChip={renderCardChip} renderSuggestiveness={renderSuggestiveness} />
+                  </>
                 ) : (
                   <>
+                    {/* Character Image Upload Section */}
+                    <Box sx={{ mb: 3, p: 2, bgcolor: '#1a1a2e', borderRadius: 1, border: '1px solid #333' }}>
+                      <Typography variant="subtitle2" sx={{ color: '#ff9800', mb: 1 }}>
+                        <ImageIcon sx={{ mr: 0.5, verticalAlign: 'middle' }} />
+                        角色图片
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        {renderCharacterImage(viewingCard.image, 80)}
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<CloudUploadIcon />}
+                            onClick={() => imageInputRef.current?.click()}
+                            disabled={uploadingImage}
+                            sx={{ color: '#e040fb', borderColor: '#e040fb', '&:hover': { borderColor: '#ce93d8' } }}
+                          >
+                            {uploadingImage ? '上传中...' : '上传图片'}
+                          </Button>
+                          {viewingCard.image && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<DeleteSweepIcon />}
+                              onClick={handleDeleteImage}
+                              sx={{ color: '#f44336', borderColor: '#f44336', '&:hover': { borderColor: '#ef9a9a' } }}
+                            >
+                              删除图片
+                            </Button>
+                          )}
+                        </Box>
+                      </Box>
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleImageUpload(file)
+                          e.target.value = ''
+                        }}
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        支持 JPG/PNG 格式，图片将存储在数据库中
+                      </Typography>
+                    </Box>
+
                     {/* AI Refine Section */}
                     <Box sx={{ mb: 3, p: 2, bgcolor: '#1a1a2e', borderRadius: 1, border: '1px solid #333' }}>
                       <Typography variant="subtitle2" sx={{ color: '#e040fb', mb: 1 }}>
@@ -717,12 +894,21 @@ export default function CharacterWorkbench() {
                         onClick={async () => {
                           setSaveLoading(true)
                           try {
-                            const res = await fetch(`${API}/ai/characters/${viewingCard.id}`, {
+                            // Save card data
+                            const cardRes = await fetch(`${API}/ai/characters/${viewingCard.id}`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ card: viewingCard.card }),
                             })
-                            if (res.ok) {
+                            if (cardRes.ok) {
+                              // Upload image if present
+                              if (viewingCard.image) {
+                                await fetch(`${API}/ai/characters/${viewingCard.id}/image`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ image: viewingCard.image }),
+                                })
+                              }
                               setSuccess('✅ 已保存修改')
                               fetchCharacters()
                             }
@@ -858,6 +1044,81 @@ export default function CharacterWorkbench() {
             </DialogTitle>
             <Divider />
             <DialogContent dividers sx={{ p: 3 }}>
+              {/* Image Upload Section */}
+              <Grid item xs={12}>
+                <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: '#0f0f23', borderRadius: 2, border: '1px solid #333' }}>
+                  {editingCard && editingCard.image ? (
+                    <Box
+                      component="img"
+                      src={editingCard.image}
+                      alt={editCardData.name}
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 2,
+                        objectFit: 'cover',
+                        border: '2px solid #333',
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 2,
+                        bgcolor: '#2a2a4e',
+                        border: '2px dashed #444',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#555',
+                      }}
+                    >
+                      <ImageIcon sx={{ fontSize: 32 }} />
+                    </Box>
+                  )}
+                  <Box>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<CloudUploadIcon />}
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={uploadingImage}
+                      sx={{ color: '#e040fb', borderColor: '#e040fb', mb: 0.5 }}
+                    >
+                      {uploadingImage ? '上传中...' : '上传图片'}
+                    </Button>
+                    {editingCard?.image && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DeleteSweepIcon />}
+                        onClick={async () => {
+                          setUploadingImage(true)
+                          try {
+                            const res = await fetch(`${API}/ai/characters/${editingCard.id}/image`, { method: 'DELETE' })
+                            if (res.ok) {
+                              setEditingCard({ ...editingCard, image: undefined })
+                              setSuccess('✅ 已删除图片')
+                            }
+                          } catch {
+                            setError('删除图片失败')
+                          } finally {
+                            setUploadingImage(false)
+                          }
+                        }}
+                        sx={{ color: '#f44336', borderColor: '#f44336', ml: 1 }}
+                      >
+                        删除图片
+                      </Button>
+                    )}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      支持 JPG/PNG 格式，图片将存储在数据库中
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
                   <TextField

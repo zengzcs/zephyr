@@ -37,6 +37,9 @@ try {
   )`);
 } catch {}
 
+// Migration: add image column to characters table if not exists
+try { sqlite.exec(`ALTER TABLE characters ADD COLUMN image BLOB`); } catch {}
+
 export const db = drizzle(sqlite);
 
 export type DatabaseType = typeof db;
