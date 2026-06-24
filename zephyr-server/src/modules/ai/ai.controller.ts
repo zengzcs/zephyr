@@ -1,7 +1,8 @@
 import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus, Query, Res } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { AiService } from './ai.service';
 import { DatabaseService } from '../database/database.service';
+import { LogService } from '../database/log.service';
 import { z } from 'zod';
 
 const GenerateOutlineDto = z.object({
@@ -67,6 +68,7 @@ export class AiController {
   constructor(
     private readonly aiService: AiService,
     private readonly dbService: DatabaseService,
+    private readonly logService: LogService,
   ) {}
 
   private get rawDb() {
@@ -81,6 +83,8 @@ export class AiController {
   @HttpCode(HttpStatus.OK)
   async generateOutline(@Body() body: { prompt: string }) {
     const { prompt } = GenerateOutlineDto.parse(body);
+
+    this.logService.info('Generating outline', { prompt }, 'ai');
 
     // Call AI to generate outline
     const rawContent = await this.aiService.generateOutline(prompt);
@@ -161,6 +165,8 @@ export class AiController {
         }
       }
     }
+
+    this.logService.info('Outline generated successfully', { bookId }, 'ai');
 
     return {
       success: true,

@@ -41,6 +41,18 @@ try {
 // Migration: add image column to characters table if not exists
 try { sqlite.exec(`ALTER TABLE characters ADD COLUMN image BLOB`); } catch { /* column may already exist */ }
 
+// Migration: create logs table for application logging
+try {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level TEXT NOT NULL CHECK(level IN ('info', 'warn', 'error', 'debug')),
+    module TEXT,
+    message TEXT NOT NULL,
+    data TEXT,
+    created_at INTEGER DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+  )`);
+} catch { /* table may already exist */ }
+
 export const db = drizzle(sqlite);
 
 export type DatabaseType = typeof db;
