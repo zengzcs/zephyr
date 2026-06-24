@@ -9,7 +9,6 @@ import {
   CircularProgress,
   Divider,
   Card,
-  CardContent,
   Chip,
   Dialog,
   DialogTitle,
@@ -544,20 +543,63 @@ export default function CharacterWorkbench() {
                   cursor: 'pointer',
                   transition: 'border-color 0.2s',
                   '&:hover': { borderColor: '#e040fb' },
+                  display: 'flex',
+                  flexDirection: 'row',
+                  overflow: 'hidden',
                 }}
                 onClick={() => handleViewCard(entry)}
               >
-                <CardContent sx={{ p: 2 }}>
-                  {/* Character Image Thumbnail */}
-                  <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center' }}>
-                    {renderCharacterImage(entry.image, 100)}
-                  </Box>
+                {/* Left: Character Image (3:4 aspect ratio) */}
+                <Box
+                  sx={{
+                    width: '35%',
+                    minWidth: '120px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: '#12122a',
+                    p: 1,
+                  }}
+                >
+                  {entry.image ? (
+                    <Box
+                      component="img"
+                      src={entry.image}
+                      alt={entry.card.name}
+                      sx={{
+                        width: '100%',
+                        aspectRatio: '3/4',
+                        objectFit: 'cover',
+                        borderRadius: 1,
+                        border: '2px solid #333',
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: '100%',
+                        aspectRatio: '3/4',
+                        borderRadius: 1,
+                        bgcolor: '#2a2a4e',
+                        border: '2px dashed #444',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#555',
+                      }}
+                    >
+                      <ImageIcon sx={{ fontSize: 24 }} />
+                    </Box>
+                  )}
+                </Box>
 
-                  {/* Name and Title */}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                {/* Right: Content */}
+                <Box sx={{ flex: 1, p: 2, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  {/* Name and Title + Actions */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
                     <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <Typography variant="h6" sx={{ color: '#e040fb', fontWeight: 'bold' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                        <Typography variant="h6" sx={{ color: '#e040fb', fontWeight: 'bold', fontSize: '1rem' }}>
                           {entry.card.name}
                         </Typography>
                         <Chip
@@ -578,7 +620,7 @@ export default function CharacterWorkbench() {
                         </Typography>
                       )}
                     </Box>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                       <IconButton
                         size="small"
                         sx={{ color: '#aaa', '&:hover': { color: '#e040fb' } }}
@@ -603,27 +645,27 @@ export default function CharacterWorkbench() {
                   </Box>
 
                   {/* Quick Info */}
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     <Chip
                       label={`${entry.card.age}岁`}
                       size="small"
-                      sx={{ bgcolor: '#2a2a4e', color: '#bbb', fontSize: '0.75rem' }}
+                      sx={{ bgcolor: '#2a2a4e', color: '#bbb', fontSize: '0.7rem' }}
                     />
                     <Chip
                       label={entry.card.occupation}
                       size="small"
-                      sx={{ bgcolor: '#2a2a4e', color: '#bbb', fontSize: '0.75rem' }}
+                      sx={{ bgcolor: '#2a2a4e', color: '#bbb', fontSize: '0.7rem' }}
                     />
                     <Chip
                       label={entry.card.archetype}
                       size="small"
-                      sx={{ bgcolor: '#2a2a4e', color: '#e040fb', fontSize: '0.75rem' }}
+                      sx={{ bgcolor: '#2a2a4e', color: '#e040fb', fontSize: '0.7rem' }}
                     />
                     {renderCardChip(entry.card.color)}
                   </Box>
 
                   {/* Suggestiveness */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <FavoriteIcon sx={{ fontSize: 14, color: '#e040fb' }} />
                     {renderSuggestiveness(entry.card.suggestiveness)}
                   </Box>
@@ -631,11 +673,11 @@ export default function CharacterWorkbench() {
                   {/* Catchphrase Preview */}
                   <Typography
                     variant="caption"
-                    sx={{ color: '#777', fontStyle: 'italic', display: 'block' }}
+                    sx={{ color: '#777', fontStyle: 'italic', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                   >
                     "{entry.card.catchphrase.substring(0, 40)}..."
                   </Typography>
-                </CardContent>
+                </Box>
               </Card>
             </Grid>
           ))}
@@ -689,11 +731,47 @@ export default function CharacterWorkbench() {
               <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
                 {viewMode === 'read' ? (
                   <>
-                    {/* Character Image */}
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-                      {renderCharacterImage(viewingCard.image, 200)}
+                    {/* Horizontal layout: Image left, Content right */}
+                    <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+                      {/* Left: Character Image (3:4 aspect ratio) */}
+                      <Box sx={{ flexShrink: 0 }}>
+                        {viewingCard.image ? (
+                          <Box
+                            component="img"
+                            src={viewingCard.image}
+                            alt={viewingCard.card.name}
+                            sx={{
+                              width: '220px',
+                              aspectRatio: '3/4',
+                              objectFit: 'cover',
+                              borderRadius: 2,
+                              border: '2px solid #333',
+                            }}
+                          />
+                        ) : (
+                          <Box
+                            sx={{
+                              width: '220px',
+                              aspectRatio: '3/4',
+                              borderRadius: 2,
+                              bgcolor: '#2a2a4e',
+                              border: '2px dashed #444',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#555',
+                            }}
+                          >
+                            <ImageIcon sx={{ fontSize: 48 }} />
+                          </Box>
+                        )}
+                      </Box>
+
+                      {/* Right: Card Details */}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <CharacterCardDetail card={viewingCard.card} renderCardChip={renderCardChip} renderSuggestiveness={renderSuggestiveness} />
+                      </Box>
                     </Box>
-                    <CharacterCardDetail card={viewingCard.card} renderCardChip={renderCardChip} renderSuggestiveness={renderSuggestiveness} />
                   </>
                 ) : (
                   <>
