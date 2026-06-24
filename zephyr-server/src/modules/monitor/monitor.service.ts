@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as os from 'os';
+import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -12,7 +13,7 @@ export class MonitorService {
     const memoryUsage = this.getMemoryUsage();
     const loadAverage = this.getLoadAverage();
 
-    let gpuInfo: any = {};
+    let gpuInfo: any;
     try {
       gpuInfo = await this.getGpuInfo();
     } catch {
@@ -41,7 +42,7 @@ export class MonitorService {
   private calculateCpuUsage(): number {
     // Read CPU times from /proc/stat for more accurate measurement
     try {
-      const stat = require('fs').readFileSync('/proc/stat', 'utf-8').split('\n')[0];
+      const stat = fs.readFileSync('/proc/stat', 'utf-8').split('\n')[0];
       const [, user, nice, system, idle, iowait, irq, softirq, steal] = stat.split(/\s+/).map(Number);
       const total = user + nice + system + idle + iowait + irq + softirq + steal;
       const busy = total - idle - iowait;

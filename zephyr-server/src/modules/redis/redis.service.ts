@@ -33,7 +33,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.client.connect();
       console.log('✅ Redis connected');
-    } catch (error) {
+    } catch {
       console.warn('⚠️ Redis connection failed, running without cache');
     }
   }

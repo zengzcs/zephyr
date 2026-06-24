@@ -1,5 +1,4 @@
-import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus, Query, Res, UseInterceptors, UploadedFile } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Post, Body, Get, Param, Delete, HttpCode, HttpStatus, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { AiService } from './ai.service';
 import { DatabaseService } from '../database/database.service';
@@ -106,7 +105,7 @@ export class AiController {
         cleaned = cleaned.trim();
         outline = JSON.parse(cleaned);
       }
-    } catch (err) {
+    } catch {
       throw new Error(`AI 返回格式错误，无法解析为 JSON: ${rawContent.substring(0, 200)}...`);
     }
 
@@ -224,7 +223,7 @@ export class AiController {
         cleaned = cleaned.trim();
         refined = JSON.parse(cleaned);
       }
-    } catch (err) {
+    } catch {
       throw new Error(`AI 返回格式错误，无法解析为 JSON: ${rawContent.substring(0, 200)}...`);
     }
 
@@ -288,7 +287,7 @@ export class AiController {
   @Post('generate-chapter')
   @HttpCode(HttpStatus.OK)
   async generateChapter(@Body() body: z.infer<typeof GenerateChapterDto>) {
-    const { bookId, chapterIndex, chapterTitle, chapterSynopsis, context, prompt, style } = GenerateChapterDto.parse(body);
+    const { bookId, chapterIndex, chapterTitle, chapterSynopsis: _chapterSynopsis, context, prompt, style } = GenerateChapterDto.parse(body);
 
     const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
     if (!book) throw new Error('Book not found');
@@ -442,7 +441,7 @@ ${styleText}
   @Post('chapters/refine')
   @HttpCode(HttpStatus.OK)
   async refineChapter(@Body() body: z.infer<typeof RefineChapterDto>) {
-    const { bookId, volumeIndex, chapterIndex, body: chapterBody, prompt } = body;
+    const { bookId, volumeIndex, chapterIndex, body: _chapterBody, prompt } = body;
 
     const book = this.rawDb.prepare('SELECT * FROM books WHERE id = ?').get(bookId);
     if (!book) throw new Error('Book not found');
@@ -1076,7 +1075,7 @@ ${style === '擦边劲爆' ? `
         cleaned = cleaned.trim();
         card = JSON.parse(cleaned);
       }
-    } catch (err) {
+    } catch {
       throw new Error(`AI 返回格式错误，无法解析为 JSON: ${response.content.substring(0, 200)}...`);
     }
 
@@ -1245,7 +1244,7 @@ ${cardJsonStr}
         cleaned = cleaned.trim();
         refinedCard = JSON.parse(cleaned);
       }
-    } catch (err) {
+    } catch {
       throw new Error(`AI 返回格式错误，无法解析为 JSON: ${response.content.substring(0, 200)}...`);
     }
 

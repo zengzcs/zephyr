@@ -9,12 +9,13 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const sqlite = new (require('bun:sqlite').Database)(dbPath);
 sqlite.exec('PRAGMA journal_mode = WAL');
 sqlite.exec('PRAGMA foreign_keys = ON');
 
 // Migration: add `style` column to `books` if not exists
-try { sqlite.exec(`ALTER TABLE books ADD COLUMN style TEXT DEFAULT '默认'`); } catch {}
+try { sqlite.exec(`ALTER TABLE books ADD COLUMN style TEXT DEFAULT '默认'`); } catch { /* column may already exist */ }
 
 // Migration: create characters table for character card workbench
 try {
@@ -24,7 +25,7 @@ try {
     card_json TEXT NOT NULL,
     created_at INTEGER DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
   )`);
-} catch {}
+} catch { /* table may already exist */ }
 
 // Migration: create character_versions table for version history
 try {
@@ -35,10 +36,10 @@ try {
     refine_prompt TEXT,
     created_at INTEGER DEFAULT (CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
   )`);
-} catch {}
+} catch { /* table may already exist */ }
 
 // Migration: add image column to characters table if not exists
-try { sqlite.exec(`ALTER TABLE characters ADD COLUMN image BLOB`); } catch {}
+try { sqlite.exec(`ALTER TABLE characters ADD COLUMN image BLOB`); } catch { /* column may already exist */ }
 
 export const db = drizzle(sqlite);
 
