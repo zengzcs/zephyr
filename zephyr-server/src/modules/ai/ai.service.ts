@@ -12,6 +12,7 @@ export interface ChatCompletionOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  timeout?: number;
 }
 
 export interface ChatCompletionResponse {
@@ -43,7 +44,7 @@ export class AiService {
   }
 
   async chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse> {
-    const { messages, model = 'default', temperature = 0.8, maxTokens = 8192 } = options;
+    const { messages, model = 'default', temperature = 0.8, maxTokens = 8192, timeout } = options;
 
     const response = await this.client.post('/chat/completions', {
       model,
@@ -51,7 +52,7 @@ export class AiService {
       temperature,
       max_tokens: maxTokens,
       stream: false,
-    });
+    }, { timeout });
 
     const data = response.data;
 
@@ -179,7 +180,8 @@ export class AiService {
     const result = await this.chatCompletion({
       messages,
       temperature: 0.8,
-      maxTokens: 8192,
+      maxTokens: 16384,
+      timeout: 500_000,
     });
 
     return result.content;
@@ -240,7 +242,8 @@ ${currentOutline}
     const result = await this.chatCompletion({
       messages,
       temperature: 0.7,
-      maxTokens: 8192,
+      maxTokens: 16384,
+      timeout: 500_000,
     });
 
     return result.content;
